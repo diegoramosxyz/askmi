@@ -32,9 +32,15 @@ contract Dqanda {
         locked = false;
     }
 
+    struct Cid {
+        string digest;
+        uint256 hashFunction;
+        uint256 size;
+    }
+
     struct Question {
-        string question;
-        string answer;
+        Cid question;
+        Cid answer;
         uint256 qIndex;
         // The balance in wei paid to the owner for a response
         // This will vary depending on the price tiers
@@ -42,7 +48,7 @@ contract Dqanda {
     }
 
     // Questioners can ask multiple questions
-    mapping(address => Question[]) public questionsMapping;
+    mapping(address => Question[]) internal questionsMapping;
 
     // Helper function to get all of the questions made by
     // a questioner
@@ -55,19 +61,20 @@ contract Dqanda {
     }
 
     // Indices from the questioners array
-    mapping(address => uint256) questionersIndex;
+    // This is used to modify the questioners array
+    mapping(address => uint256) internal questionersIndex;
 
     // An array of all questioners. Needed for the UI.
-    address[] public questioners;
+    address[] internal questioners;
 
     // Save new questioners
-    function addQuestioner(address _questioner) internal {
-        // If the questioner does not exist
-        if (_questioner != address(0) && questionersIndex[_questioner] == 0) {
+    function addQuestioner() internal {
+        // If the questioner does not exist. 0 is the default value for uint256.
+        if (msg.sender != address(0) && questionersIndex[msg.sender] == 0) {
             // Save the index on the questionersIndex mapping
-            questionersIndex[_questioner] = questioners.length;
+            questionersIndex[msg.sender] = questioners.length;
             // Append the questioner to the questioners array
-            questioners.push(_questioner);
+            questioners.push(msg.sender);
         }
     }
 
@@ -93,9 +100,23 @@ contract Dqanda {
     }
 
     // Anyone, but the owner can ask a questions
-    function ask(string memory _question) public payable notOwner coversCost {
+    function ask(
+        string memory _digest,
+        uint256 _hashFunction,
+        uint256 _size
+    ) public payable notOwner coversCost {
         // Save new questioners
-        addQuestioner(msg.sender);
+        addQuestioner();
+
+        // Create Cid object from argumets
+        Cid memory _question = Cid({
+            digest: _digest,
+            hashFunction: _hashFunction,
+            size: _size
+        });
+
+        // Initialize answer object with default values
+        Cid memory _answer;
 
         uint256 qIndex = questionsMapping[msg.sender].length;
 
@@ -103,7 +124,7 @@ contract Dqanda {
         questionsMapping[msg.sender].push(
             Question({
                 question: _question,
-                answer: "",
+                answer: _answer,
                 balance: msg.value,
                 qIndex: qIndex
             })
@@ -121,31 +142,65 @@ contract Dqanda {
         // Stop execution if the questioner has no questions
         require(questions.length > 0, "No questions available to remove.");
 
+        // Check that the question exists
+        require(_qIndex < questions.length, "Question does not exist.");
+
         // Check that the question has not been answered
+        // An empty string is the default value for a string
         require(
-            keccak256(bytes(questions[_qIndex].answer)) == keccak256(bytes("")),
+            keccak256(bytes(questions[_qIndex].answer.digest)) ==
+                keccak256(bytes("")),
             "Question already answered."
         );
 
-        // Create a payment variable
+        // Create a payment variable with the payment amount
         uint256 payment = questions[_qIndex].balance;
 
         if (questions.length == 1) {
             // In this case, the questioner is removing their last question
             // 1- Remove his address from the questioners array
-            // 2- Reset questionersIndex
+            // 2- Reset questionersIndex (default value of uint is 0)
             // 3- Remove the last question from the questions array
 
-            // Move the last element into the place to delete
-            questioners[questionersIndex[msg.sender]] = questioners[
-                questioners.length - 1
-            ];
+            // 0xabc is calling the function
+
+            // [0x0, 0xabc, 0x123]
+            // 0xabc -> 1
+            // 0x123 -> 2
+
+            // Get the last questioner in the array
+            address lastQuestioner = questioners[questioners.length - 1];
+
+            // Get the index for the function caller
+            uint256 callerIndex = questionersIndex[msg.sender];
+
+            // Change the index to that of the questioner to be deleted
+            questionersIndex[lastQuestioner] = callerIndex;
+
+            // [0x0, 0xabc, 0x123]
+            // 0xabc -> 1
+            // 0x123 -> 1
+
+            // Use the last questioner to overwrite the questioner to be deleted
+            questioners[callerIndex] = lastQuestioner;
+
+            // [0x0, 0x123, 0x123]
+            // 0xabc -> 1
+            // 0x123 -> 1
 
             // Remove the last element/duplicate
             questioners.pop();
 
+            // [0x0, 0x123]
+            // 0xabc -> 1
+            // 0x123 -> 1
+
             // Set questionersIndex to the default value: 0
-            delete questionersIndex[msg.sender];
+            questionersIndex[msg.sender] = 0;
+
+            // [0x0, 0x123]
+            // 0xabc -> 0
+            // 0x123 -> 1
 
             // If there is only one element,
             // just remove the last element
@@ -154,13 +209,13 @@ contract Dqanda {
             // Delete question and shrink array
 
             // Get the last element of the array
-            Question memory questionLastIndex = questions[questions.length - 1];
+            Question memory lastQuestion = questions[questions.length - 1];
 
             // Change its qIndex value to match new index
-            questionLastIndex.qIndex = _qIndex;
+            lastQuestion.qIndex = _qIndex;
 
-            // Move the last element into the place to delete
-            questions[_qIndex] = questionLastIndex;
+            // Use the last element to overwrite the element to be deleted
+            questions[_qIndex] = lastQuestion;
 
             // Remove the last element/duplicate
             questions.pop();
@@ -176,24 +231,31 @@ contract Dqanda {
     // Only the owner can respond and get paid.
     function respond(
         address _questioner,
-        string memory _answer,
+        string memory _digest,
+        uint256 _hashFunction,
+        uint256 _size,
         uint256 _qIndex
     ) public noReentrant onlyOwner {
         // Get all the questions from a questioner
         Question[] storage questions = questionsMapping[_questioner];
 
-        // If the length of the questions array is less than the index,
-        // then the question does not exist.
-        require(questions.length >= _qIndex, "The question does not exist.");
+        // Check that the question exists
+        require(_qIndex < questions.length, "Question does not exist.");
 
         // Create payment variable
         uint256 payment = questions[_qIndex].balance;
+
+        Cid memory _answer = Cid({
+            digest: _digest,
+            hashFunction: _hashFunction,
+            size: _size
+        });
 
         // Update one question based on the index
         questions[_qIndex] = Question({
             question: questions[_qIndex].question,
             answer: _answer,
-            balance: 0 wei, // Update balance
+            balance: 0 wei,
             qIndex: _qIndex
         });
 
