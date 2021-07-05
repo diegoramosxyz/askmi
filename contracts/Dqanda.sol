@@ -1,6 +1,15 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+contract DqandaFactory {
+    Dqanda[] public dqandas;
+
+    function create(uint256 _price) public {
+        Dqanda newDqanda = new Dqanda(msg.sender, _price);
+        dqandas.push(newDqanda);
+    }
+}
+
 // RESPONDER: The owner of the contract.
 // QUESTIONER: Anyone who asks a question.
 contract Dqanda {
@@ -8,8 +17,8 @@ contract Dqanda {
     // The price in wei required to ask a question
     uint256 public price; // This will become a mapping of price tiers
 
-    constructor(uint256 _price) {
-        owner = msg.sender;
+    constructor(address _owner, uint256 _price) {
+        owner = _owner;
         price = _price;
 
         // Occupy the first index

@@ -15,7 +15,8 @@ async function main() {
 
   // We get the contract to deploy
   const Factory = await hre.ethers.getContractFactory('Dqanda')
-  const contract = await Factory.deploy()
+  // Deploy with a price per question of 1 ETH
+  const contract = await Factory.deploy('1000000000000000000')
 
   await contract.deployed()
 
