@@ -4,6 +4,9 @@
 // When running the script with `hardhat run <script>` you'll find the Hardhat
 // Runtime Environment's members available in the global scope.
 const hre = require('hardhat')
+const {
+  ethers: { getSigners },
+} = require('hardhat')
 
 async function main() {
   // Hardhat always runs the compile task when running scripts with its command
@@ -13,14 +16,20 @@ async function main() {
   // manually to make sure everything is compiled
   // await hre.run('compile');
 
+  accounts = await getSigners()
   // We get the contract to deploy
-  const Factory = await hre.ethers.getContractFactory('Dqanda')
+  const Factory = await hre.ethers.getContractFactory('AskMi')
   // Deploy with a price per question of 1 ETH
-  const contract = await Factory.deploy('1000000000000000000')
+  const contract = await Factory.deploy(
+    accounts[0],
+    ['100000000000000000', '1000000000000000000'],
+    '10000000000000000',
+    accounts[0]
+  )
 
   await contract.deployed()
 
-  console.log('Dqanda deployed to:', contract.address)
+  console.log('AskMi deployed to:', contract.address)
 }
 
 // We recommend this pattern to be able to use async/await everywhere
