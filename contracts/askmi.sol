@@ -1,58 +1,38 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-contract AskMiFactory {
-    address[] internal askMis;
-    mapping(address => uint256) internal askMisIndexedByOwner;
-    address internal owner;
-
-    constructor() {
-        owner = msg.sender;
-        // Ocuppy the first element to easily perform lookups
-        askMis.push(address(0));
-    }
-
-    // Get the address of the contract corresponding to the owner
-    function getMyAskMi(address _owner) public view returns (address) {
-        uint256 askMiIndex = askMisIndexedByOwner[_owner];
-        require(
-            // askMisIndexedByOwner will return 0 as a default value
-            askMiIndex > 0,
-            "The selected address has not created an AskMi contract."
-        );
-        return askMis[askMiIndex];
-    }
-
-    function create(uint256[] memory _tiers, uint256 _tip) public {
-        // Check that the tiers array is not empty
-        require(_tiers.length > 0, "Please, include at least one tier.");
-
-        AskMi _askMi = new AskMi(msg.sender, _tiers, _tip, owner);
-        askMisIndexedByOwner[msg.sender] = askMis.length;
-        askMis.push(address(_askMi));
-    }
-}
-
 // TODO: Make the answers updatable
 // RESPONDER: The owner of the contract.
 // QUESTIONER: Anyone who asks a question.
 // EXCHANGE: The exchange between the questioner asking
 // as question and the responder answering
 contract AskMi {
-    address public owner;
+    /** 
+        VARIABLES
+     */
+
+    address internal owner;
     // The tip cost in wei
     uint256 public tip;
     // address of the developer
     address internal dev;
     // dev fee (balance/200 = 0.5%)
     uint256 public fee = 200;
-
     // The prices in wei required to ask a question
     uint256[] internal tiers;
+    // Questioners can have multiple exchanges with the same contract
+    mapping(address => Exchange[]) internal exchanges;
+    // Indices from the questioners array
+    // This is used to modify the questioners array
+    mapping(address => uint256) internal questionersIndex;
+    // An array of all questioners
+    address[] internal questioners;
+    // Used to re-entrancy
+    bool internal locked;
 
-    function getTiers() public view returns (uint256[] memory) {
-        return tiers;
-    }
+    /**
+        CONSTRUCTOR
+     */
 
     constructor(
         address _owner,
@@ -72,19 +52,9 @@ contract AskMi {
     // Make the contract payable
     receive() external payable {}
 
-    event QuestionAsked(address _questioner, uint256 _exchangeIndex);
-    event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
-    event QuestionRemoved(address _questioner, uint256 _exchangeIndex);
-    event TipIssued(address _questioner, uint256 _exchangeIndex);
-
-    bool internal locked;
-
-    modifier noReentrant() {
-        require(!locked, "No re-entrancy.");
-        locked = true;
-        _;
-        locked = false;
-    }
+    /**
+        STRUCTS
+     */
 
     struct Cid {
         string digest;
@@ -102,41 +72,24 @@ contract AskMi {
         uint256 tips;
     }
 
-    // Questioners can have multiple exchanges with the same contract
-    mapping(address => Exchange[]) internal exchanges;
+    /**
+        EVENTS
+     */
 
-    // Helper function to get all of the questions made by
-    // one questioner
-    function getQuestions(address _questioner)
-        public
-        view
-        returns (Exchange[] memory)
-    {
-        return exchanges[_questioner];
-    }
+    event QuestionAsked(address _questioner, uint256 _exchangeIndex);
+    event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
+    event QuestionRemoved(address _questioner, uint256 _exchangeIndex);
+    event TipIssued(
+        address _tipper,
+        address _questioner,
+        uint256 _exchangeIndex
+    );
+    event TipUpdated(uint256 _newTipPrice);
+    event TiersUpdated(uint256[] _newTiers);
 
-    // Indices from the questioners array
-    // This is used to modify the questioners array
-    mapping(address => uint256) internal questionersIndex;
-
-    // An array of all questioners. Needed for the UI.
-    address[] internal questioners;
-
-    // Save new questioners
-    function addQuestioner() internal {
-        // If the questioner does not exist. 0 is the default value for uint256.
-        if (msg.sender != address(0) && questionersIndex[msg.sender] == 0) {
-            // Save the index on the questionersIndex mapping
-            questionersIndex[msg.sender] = questioners.length;
-            // Append the questioner to the questioners array
-            questioners.push(msg.sender);
-        }
-    }
-
-    // Helper function to get the complete questioners array.
-    function getQuestioners() public view returns (address[] memory) {
-        return questioners;
-    }
+    /** 
+        MODIFIERS
+     */
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Unauthorized: Must be owner.");
@@ -158,9 +111,68 @@ contract AskMi {
         _;
     }
 
+    modifier noReentrant() {
+        require(!locked, "No re-entrancy.");
+        locked = true;
+        _;
+        locked = false;
+    }
+
+    /** 
+        UPDATE FUNCTIONS 
+    */
+
+    function updateTip(uint256 _newTipPrice) public onlyOwner {
+        tip = _newTipPrice;
+        emit TipUpdated(_newTipPrice);
+    }
+
     function updateTiers(uint256[] memory _newTiers) public onlyOwner {
         tiers = _newTiers;
+        emit TiersUpdated(_newTiers);
     }
+
+    /**
+        GETTER FUNCTIONS
+     */
+
+    function getTiers() public view returns (uint256[] memory) {
+        return tiers;
+    }
+
+    // Helper function to get the complete questioners array.
+    function getQuestioners() public view returns (address[] memory) {
+        return questioners;
+    }
+
+    // Helper function to get all of the questions made by
+    // one questioner
+    function getQuestions(address _questioner)
+        public
+        view
+        returns (Exchange[] memory)
+    {
+        return exchanges[_questioner];
+    }
+
+    /**
+        HELPER FUNCTIONS
+     */
+
+    // Save new questioners
+    function addQuestioner() internal {
+        // If the questioner does not exist. 0 is the default value for uint256.
+        if (msg.sender != address(0) && questionersIndex[msg.sender] == 0) {
+            // Save the index on the questionersIndex mapping
+            questionersIndex[msg.sender] = questioners.length;
+            // Append the questioner to the questioners array
+            questioners.push(msg.sender);
+        }
+    }
+
+    /**
+        PRIMARY FUNCTIONS
+     */
 
     // Anyone, but the owner can ask a questions
     function ask(
@@ -198,11 +210,19 @@ contract AskMi {
         emit QuestionAsked(msg.sender, _exchangeIndex);
     }
 
-    // Todo: Add option to pay removal fee to the responder
-    // Remove a question and widthdraw deposit
-    function removeQuestion(uint256 _exchangeIndex) public noReentrant {
+    // The questioner can remove its own questions and receive a refund
+    // The owner can reject the question and issue a refund
+    function removeQuestion(address _questioner, uint256 _exchangeIndex)
+        public
+        noReentrant
+    {
+        address questioner = msg.sender;
+        // Only allow the owner to remove questions from any questioner
+        if (msg.sender == owner) {
+            questioner = _questioner;
+        }
         // Get all the exchanges from a questioner
-        Exchange[] storage _exchanges = exchanges[msg.sender];
+        Exchange[] storage _exchanges = exchanges[questioner];
 
         // Stop execution if the questioner has no questions
         require(_exchanges.length > 0, "No questions available to remove.");
@@ -218,8 +238,8 @@ contract AskMi {
             "Question already answered."
         );
 
-        // Create a payment variable with the payment amount
-        uint256 payment = _exchanges[_exchangeIndex].balance;
+        // Create a refund variable to return the money deposited
+        uint256 refund = _exchanges[_exchangeIndex].balance;
 
         if (_exchanges.length == 1) {
             // In this case, the questioner is removing their last question
@@ -237,7 +257,7 @@ contract AskMi {
             address lastQuestioner = questioners[questioners.length - 1];
 
             // Get the index for the function caller
-            uint256 callerIndex = questionersIndex[msg.sender];
+            uint256 callerIndex = questionersIndex[questioner];
 
             // Change the index to that of the questioner to be deleted
             questionersIndex[lastQuestioner] = callerIndex;
@@ -261,7 +281,7 @@ contract AskMi {
             // 0x123 -> 1
 
             // Set questionersIndex to the default value: 0
-            questionersIndex[msg.sender] = 0;
+            questionersIndex[questioner] = 0;
 
             // [0x0, 0x123]
             // 0xabc -> 0
@@ -287,10 +307,10 @@ contract AskMi {
         }
 
         // Pay the questioner
-        (bool success, ) = msg.sender.call{value: payment}("");
+        (bool success, ) = questioner.call{value: refund}("");
         require(success, "Failed to send Ether");
 
-        emit QuestionRemoved(msg.sender, _exchangeIndex);
+        emit QuestionRemoved(questioner, _exchangeIndex);
     }
 
     // Only the owner can respond and get paid.
@@ -320,14 +340,14 @@ contract AskMi {
             size: _size
         });
 
+        Exchange storage _exchange = _exchanges[_exchangeIndex];
+
+        // Update the selected exchange
+        _exchange.answer = _answer;
+        _exchange.balance = 0 wei;
+
         // Update one exchange based on the index
-        _exchanges[_exchangeIndex] = Exchange({
-            question: _exchanges[_exchangeIndex].question,
-            answer: _answer,
-            balance: 0 wei,
-            exchangeIndex: _exchangeIndex,
-            tips: _exchanges[_exchangeIndex].tips
-        });
+        _exchanges[_exchangeIndex] = _exchange;
 
         // Pay the owner of the contract (The Responder)
         (bool success, ) = owner.call{value: ownerPayment}("");
@@ -337,10 +357,6 @@ contract AskMi {
         require(devSuccess, "Failed to send Ether");
 
         emit QuestionAnswered(_questioner, _exchangeIndex);
-    }
-
-    function updateTip(uint256 _tip) public onlyOwner {
-        tip = _tip;
     }
 
     // Tip an exchange
@@ -363,14 +379,14 @@ contract AskMi {
 
         Exchange storage _exchange = _exchanges[_exchangeIndex];
 
-        // Update the selected exchange
         _exchange.tips = _exchanges[_exchangeIndex].tips + 1;
+        // Update the selected exchange
         _exchanges[_exchangeIndex] = _exchange;
 
         // Pay the owner of the contract (The Responder)
         (bool success, ) = owner.call{value: payment}("");
         require(success, "Failed to send Ether");
 
-        emit TipIssued(_questioner, _exchangeIndex);
+        emit TipIssued(msg.sender, _questioner, _exchangeIndex);
     }
 }
