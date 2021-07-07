@@ -11,7 +11,7 @@ contract AskMi {
         VARIABLES
      */
 
-    address internal owner;
+    address public owner;
     // The tip cost in wei
     uint256 public tip;
     // address of the developer
@@ -145,7 +145,7 @@ contract AskMi {
         return questioners;
     }
 
-    // Helper function to get all of the questions made by
+    // Helper function to get all of the questions asked by
     // one questioner
     function getQuestions(address _questioner)
         public
@@ -167,6 +167,18 @@ contract AskMi {
             questionersIndex[msg.sender] = questioners.length;
             // Append the questioner to the questioners array
             questioners.push(msg.sender);
+        }
+    }
+
+    function selectToRemove(address _questioner)
+        internal
+        view
+        returns (address)
+    {
+        if (msg.sender == owner) {
+            return _questioner;
+        } else {
+            return msg.sender;
         }
     }
 
@@ -216,11 +228,9 @@ contract AskMi {
         public
         noReentrant
     {
-        address questioner = msg.sender;
         // Only allow the owner to remove questions from any questioner
-        if (msg.sender == owner) {
-            questioner = _questioner;
-        }
+        address questioner = selectToRemove(_questioner);
+
         // Get all the exchanges from a questioner
         Exchange[] storage _exchanges = exchanges[questioner];
 

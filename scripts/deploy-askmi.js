@@ -12,17 +12,17 @@ async function main() {
   // If this script is run directly using `node` you may want to call compile
   // manually to make sure everything is compiled
   // await hre.run('compile');
-  
+
   let accounts = await hre.ethers.getSigners()
 
   // We get the contract to deploy
   const Factory = await hre.ethers.getContractFactory('AskMi')
   // Deploy with a price per question of 1 ETH
   const contract = await Factory.deploy(
-    accounts[0],
+    accounts[1].address,
     ['100000000000000000', '1000000000000000000'],
     '10000000000000000',
-    accounts[0]
+    accounts[0].address
   )
 
   await contract.deployed()
