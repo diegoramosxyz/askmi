@@ -219,8 +219,6 @@ contract AskMi {
     // @param _hashFunction The hash function code for the function used
     // @param _size The length of digest
     // @param _tierIndex The index of the selected tier in the tiers array
-    // TODO: UPDATING THE TIERS BRAKES THE SMART PROGRAM! UPDATES TO THE TIERS MUST ONLY
-    // HAPPEN IF THERE ARE NO PENDING QUESTIONS OR ALL PENDING QUESTIONS MUST BE REMOVED
     function ask(
         string memory _digest,
         uint256 _hashFunction,
