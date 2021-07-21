@@ -1,39 +1,60 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-// TODO: Make the answers updatable
+// TODO:
+// - Make the answers updatable
+// - Allow the responder to write an "AD" about his
+// expertise, social media and others.
+// - Set a min. value to charge per question
+
 // RESPONDER: The owner of the contract.
 // QUESTIONER: Anyone who asks a question.
 // EXCHANGE: The exchange between the questioner asking
 // as question and the responder answering
+
+// @title A question-and-answer smart contract
+// @author Diego Ramos
 contract AskMi {
     /** 
         VARIABLES
      */
 
+    // @notice The owner of this smart contract
     address public owner;
-    // The tip cost in wei
+
+    // @notice The cost to tip an exchange in Wei
     uint256 public tip;
-    // address of the developer
+
+    // @notice The developer's address which receives the dev fee
     address internal dev;
-    // dev fee (balance/200 = 0.5%)
+
+    // @notice The fee sent to the developer (balance/200 = 0.5%)
     uint256 public fee = 200;
-    // The prices in wei required to ask a question
+
+    // @notice The prices to ask a question
     uint256[] internal tiers;
-    // Questioners can have multiple exchanges with the same contract
+
+    // @notice The list of questions from a questioner
     mapping(address => Exchange[]) internal exchanges;
-    // Indices from the questioners array
+
+    // @notice Helper mapping to find specific questioners
     // This is used to modify the questioners array
     mapping(address => uint256) internal questionersIndex;
-    // An array of all questioners
+
+    // @notice An array of all unique addresses which have asked a question
     address[] internal questioners;
-    // Used to re-entrancy
+
+    // @notice Variable used to prevent re-entrancy
     bool internal locked;
 
     /**
         CONSTRUCTOR
      */
 
+    // @param _owner The owner of the current contract
+    // @param _tiers The prices to ask a question
+    // @param _tip The cost to tip in Wei
+    // @param _dev The developer's address which receives the dev fee
     constructor(
         address _owner,
         uint256[] memory _tiers,
@@ -49,13 +70,14 @@ contract AskMi {
         questioners.push(address(0));
     }
 
-    // Make the contract payable
+    // Make the smart contract payable
     receive() external payable {}
 
     /**
         STRUCTS
      */
 
+    // The multihash representation of an IPFS' CID
     struct Cid {
         string digest;
         uint256 hashFunction;
@@ -122,11 +144,13 @@ contract AskMi {
         UPDATE FUNCTIONS 
     */
 
+    // @notice Update the tip value
     function updateTip(uint256 _newTipPrice) public onlyOwner {
         tip = _newTipPrice;
         emit TipUpdated(_newTipPrice);
     }
 
+    // @notice Update the tiers array
     function updateTiers(uint256[] memory _newTiers) public onlyOwner {
         tiers = _newTiers;
         emit TiersUpdated(_newTiers);
@@ -136,17 +160,17 @@ contract AskMi {
         GETTER FUNCTIONS
      */
 
+    // @notice Get the complete tiers array
     function getTiers() public view returns (uint256[] memory) {
         return tiers;
     }
 
-    // Helper function to get the complete questioners array.
+    // @notice Get the complete questioners array.
     function getQuestioners() public view returns (address[] memory) {
         return questioners;
     }
 
-    // Helper function to get all of the questions asked by
-    // one questioner
+    // @notice Get all of the questions asked by one questioner
     function getQuestions(address _questioner)
         public
         view
@@ -159,17 +183,21 @@ contract AskMi {
         HELPER FUNCTIONS
      */
 
-    // Save new questioners
+    // @notice Save the unique addresses of the questioners
     function addQuestioner() internal {
-        // If the questioner does not exist. 0 is the default value for uint256.
+        // Only push a new address into the array if it does NOT contain
+        // the selected address
         if (msg.sender != address(0) && questionersIndex[msg.sender] == 0) {
-            // Save the index on the questionersIndex mapping
+            // The min. value for the length of the array is 1, because
+            // index 0 of the array always contains address(0)
             questionersIndex[msg.sender] = questioners.length;
             // Append the questioner to the questioners array
             questioners.push(msg.sender);
         }
     }
 
+    // @notice Only allow the RESPONDER and the user who asked the question
+    // to delete a question.
     function selectToRemove(address _questioner)
         internal
         view
@@ -186,7 +214,13 @@ contract AskMi {
         PRIMARY FUNCTIONS
      */
 
-    // Anyone, but the owner can ask a questions
+    // @notice Ask a question to the RESPONDER
+    // @param _digest The digest output of hash function in hex with prepended '0x'
+    // @param _hashFunction The hash function code for the function used
+    // @param _size The length of digest
+    // @param _tierIndex The index of the selected tier in the tiers array
+    // TODO: UPDATING THE TIERS BRAKES THE SMART PROGRAM! UPDATES TO THE TIERS MUST ONLY
+    // HAPPEN IF THERE ARE NO PENDING QUESTIONS OR ALL PENDING QUESTIONS MUST BE REMOVED
     function ask(
         string memory _digest,
         uint256 _hashFunction,
@@ -222,8 +256,10 @@ contract AskMi {
         emit QuestionAsked(msg.sender, _exchangeIndex);
     }
 
-    // The questioner can remove its own questions and receive a refund
-    // The owner can reject the question and issue a refund
+    // @notice The questioner or the responder can remove a question and
+    // a refund is issued
+    // TODO: Maybe have the responder receive a fraction of the refund if the
+    // questioner removes the question
     function removeQuestion(address _questioner, uint256 _exchangeIndex)
         public
         noReentrant
@@ -297,8 +333,8 @@ contract AskMi {
             // 0xabc -> 0
             // 0x123 -> 1
 
-            // If there is only one element,
-            // just remove the last element
+            // Remove the last element
+            // TODO: Check if the delete keyword should be used here
             _exchanges.pop();
         } else {
             // Delete question and shrink array
@@ -323,7 +359,13 @@ contract AskMi {
         emit QuestionRemoved(questioner, _exchangeIndex);
     }
 
-    // Only the owner can respond and get paid.
+    // @notice The owner answers a question
+    // @param _questioner The address which asked the question
+    // @param _digest The digest output of hash function in hex with prepended '0x'
+    // @param _hashFunction The hash function code for the function used
+    // @param _size The length of digest
+    // @param _exchangeIndex The index of the selected exchange in the array of exchanges of
+    // the questioner
     function respond(
         address _questioner,
         string memory _digest,
@@ -337,12 +379,12 @@ contract AskMi {
         // Check that the exchange exists
         require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
 
+        // Get the balance of the selected exchange
         uint256 _balance = _exchanges[_exchangeIndex].balance;
 
         // Create payment variables
-        // Dev fee (0.5%)
         uint256 devFee = (_balance) / fee;
-        uint256 ownerPayment = _balance - devFee;
+        uint256 payment = _balance - devFee;
 
         Cid memory _answer = Cid({
             digest: _digest,
@@ -350,17 +392,17 @@ contract AskMi {
             size: _size
         });
 
+        // Get the selected exchange
         Exchange storage _exchange = _exchanges[_exchangeIndex];
 
         // Update the selected exchange
         _exchange.answer = _answer;
         _exchange.balance = 0 wei;
 
-        // Update one exchange based on the index
         _exchanges[_exchangeIndex] = _exchange;
 
         // Pay the owner of the contract (The Responder)
-        (bool success, ) = owner.call{value: ownerPayment}("");
+        (bool success, ) = owner.call{value: payment}("");
         require(success, "Failed to send Ether");
         // Pay dev fee
         (bool devSuccess, ) = dev.call{value: devFee}("");
@@ -369,7 +411,7 @@ contract AskMi {
         emit QuestionAnswered(_questioner, _exchangeIndex);
     }
 
-    // Tip an exchange
+    // @notice Tip an exchange to highlight helpful content
     function issueTip(address _questioner, uint256 _exchangeIndex)
         public
         payable
@@ -387,13 +429,17 @@ contract AskMi {
         // Create payment variable
         uint256 payment = msg.value;
 
+        // Get the selected exchange
         Exchange storage _exchange = _exchanges[_exchangeIndex];
 
+        // Increment the tip count
         _exchange.tips = _exchanges[_exchangeIndex].tips + 1;
+
         // Update the selected exchange
         _exchanges[_exchangeIndex] = _exchange;
 
         // Pay the owner of the contract (The Responder)
+        // TODO: Split the tip among the responder, the questioner and the dev
         (bool success, ) = owner.call{value: payment}("");
         require(success, "Failed to send Ether");
 
