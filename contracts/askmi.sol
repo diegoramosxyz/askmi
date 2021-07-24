@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 // TODO:
 // - Make the answers updatable
-// - Allow the responder to write an "AD" about his
+// - Maybe allow the responder to write an "AD" about his
 // expertise, social media and others.
 // - Set a min. value to charge per question
 
