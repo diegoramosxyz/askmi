@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
 // TODO:
 // - Make the answers updatable
 // - Maybe allow the responder to write an "AD" about his
@@ -14,10 +16,11 @@ pragma solidity ^0.8.0;
 
 // @title A question-and-answer smart contract
 // @author Diego Ramos
-contract AskMi {
+contract AskMi_ERC20 {
     /** 
         VARIABLES
      */
+    IERC20 public token;
 
     // @notice The owner of this smart contract
     address public owner;
@@ -56,11 +59,13 @@ contract AskMi {
     // @param _tip The cost to tip in Wei
     // @param _dev The developer's address which receives the dev fee
     constructor(
+        address _token,
         address _owner,
         uint256[] memory _tiers,
         uint256 _tip,
         address _dev
     ) {
+        token = IERC20(_token);
         owner = _owner;
         tiers = _tiers;
         tip = _tip;
@@ -123,16 +128,6 @@ contract AskMi {
         _;
     }
 
-    // Ensure the questioner is paying the right price
-    modifier coversCost(uint256 _tierIndex) {
-        require(_tierIndex < tiers.length, "The selected tier does not exist.");
-        require(
-            msg.value == tiers[_tierIndex],
-            "The deposit is not equal to the tier price."
-        );
-        _;
-    }
-
     modifier noReentrant() {
         require(!locked, "No re-entrancy.");
         locked = true;
@@ -146,12 +141,26 @@ contract AskMi {
 
     // @notice Update the tip value
     function updateTip(uint256 _newTipPrice) public onlyOwner {
+        require(
+            _newTipPrice < token.totalSupply(),
+            "The tip price greater than the total supply."
+        );
         tip = _newTipPrice;
         emit TipUpdated(_newTipPrice);
     }
 
     // @notice Update the tiers array
     function updateTiers(uint256[] memory _newTiers) public onlyOwner {
+        uint256 _tiersSize = _newTiers.length;
+        uint256 _supply = token.totalSupply();
+
+        // Check that tiers do not exceed total supply
+        for (uint256 i = 0; i < _tiersSize; i++) {
+            require(
+                _newTiers[i] < _supply,
+                "At least one of the tiers has a value greater than the token's total supply."
+            );
+        }
         tiers = _newTiers;
         emit TiersUpdated(_newTiers);
     }
@@ -210,7 +219,13 @@ contract AskMi {
         uint256 _hashFunction,
         uint256 _size,
         uint256 _tierIndex
-    ) public payable notOwner coversCost(_tierIndex) {
+    ) public payable notOwner {
+        // Deposit tokens
+        require(
+            token.transferFrom(msg.sender, address(this), tiers[_tierIndex]),
+            "Insufficient funds"
+        );
+
         // Save new questioners
         addQuestioner();
 
@@ -231,7 +246,7 @@ contract AskMi {
             Exchange({
                 question: _question,
                 answer: _answer,
-                balance: msg.value,
+                balance: tiers[_tierIndex],
                 exchangeIndex: _exchangeIndex,
                 tips: 0
             })
@@ -342,8 +357,10 @@ contract AskMi {
         }
 
         // Pay the questioner
-        (bool success, ) = questioner.call{value: refund}("");
-        require(success, "Failed to send Ether");
+        require(
+            token.transfer(questioner, refund),
+            "Failed to send issue refund."
+        );
 
         emit QuestionRemoved(questioner, _exchangeIndex);
     }
@@ -386,16 +403,13 @@ contract AskMi {
 
         // Update the selected exchange
         _exchange.answer = _answer;
-        _exchange.balance = 0 wei;
+        _exchange.balance = 0;
 
         _exchanges[_exchangeIndex] = _exchange;
 
         // Pay the owner of the contract (The Responder)
-        (bool success, ) = owner.call{value: payment}("");
-        require(success, "Failed to send Ether");
-        // Pay dev fee
-        (bool devSuccess, ) = dev.call{value: devFee}("");
-        require(devSuccess, "Failed to send Ether");
+        require(token.transfer(owner, payment), "Failed to pay owner.");
+        require(token.transfer(dev, devFee), "Failed to pay developer.");
 
         emit QuestionAnswered(_questioner, _exchangeIndex);
     }
@@ -412,12 +426,6 @@ contract AskMi {
         // Check that the exchange exists
         require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
 
-        // Check that the tip amount is correct
-        require(msg.value == tip, "The tip amount is incorrect.");
-
-        // Create payment variable
-        uint256 payment = msg.value;
-
         // Get the selected exchange
         Exchange memory _exchange = _exchanges[_exchangeIndex];
 
@@ -429,8 +437,10 @@ contract AskMi {
 
         // Pay the owner of the contract (The Responder)
         // TODO: Split the tip among the responder, the questioner and the dev
-        (bool success, ) = owner.call{value: payment}("");
-        require(success, "Failed to send Ether");
+        require(
+            token.transferFrom(msg.sender, owner, tip),
+            "Failed to send issue tip."
+        );
 
         emit TipIssued(msg.sender, _questioner, _exchangeIndex);
     }

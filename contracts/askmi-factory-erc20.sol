@@ -1,11 +1,15 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "./askmi.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "./askmi-erc20.sol";
 
 // @title A factory for AskMi contracts
 // @author Diego Ramos
-contract AskMiFactory {
+contract AskMiFactory_ERC20 {
+    // @notice The selected ERC20 to act as currency
+    IERC20 public token;
+
     // @notice Array containing all AskMi instances
     address[] internal askMis;
 
@@ -18,7 +22,8 @@ contract AskMiFactory {
     // Record the instantiation of an AskMi contract
     event AskMiInstantiated(address _askMiAddress);
 
-    constructor() {
+    constructor(address _token) {
+        token = IERC20(_token);
         owner = msg.sender;
         // Ocuppy the first element to easily perform lookups
         askMis.push(address(0));
@@ -41,15 +46,32 @@ contract AskMiFactory {
             askMisIndexedByOwner[msg.sender] == 0,
             "This address already owns an AskMi instance."
         );
+
         uint256 _tiersSize = _tiers.length;
+        uint256 _supply = token.totalSupply();
+
         // Check that the tiers array is not empty and not bigger than 3
         require(
             _tiersSize > 0 && _tiersSize <= 3,
             "There must be between 1 and 3 tiers."
         );
 
+        // Check that tiers do not exceed total supply
+        for (uint256 i = 0; i < _tiersSize; i++) {
+            require(
+                _tiers[i] <= _supply,
+                "At least one of the tiers has a value greater than the token's total supply."
+            );
+        }
+
         // Instantiate AskMi contract
-        AskMi _askMi = new AskMi(msg.sender, _tiers, _tip, owner);
+        AskMi_ERC20 _askMi = new AskMi_ERC20(
+            address(token),
+            msg.sender,
+            _tiers,
+            _tip,
+            owner
+        );
 
         // Save the owner's index
         askMisIndexedByOwner[msg.sender] = askMis.length;

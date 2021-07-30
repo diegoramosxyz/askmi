@@ -5,7 +5,7 @@ require('dotenv').config()
  * @type import('hardhat/config').HardhatUserConfig
  */
 
-const { API_URL, PRIVATE_KEY } = process.env
+const { MUMBAI_API_URL, ROPSTEN_API_URL, PRIVATE_KEY } = process.env
 
 /**
  * Hardhat Localhost network (MetaMask)
@@ -22,7 +22,11 @@ module.exports = {
   networks: {
     hardhat: {},
     ropsten: {
-      url: API_URL,
+      url: ROPSTEN_API_URL,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
+    mumbai: {
+      url: MUMBAI_API_URL,
       accounts: [`0x${PRIVATE_KEY}`],
     },
   },
