@@ -380,7 +380,7 @@ contract AskMi_ERC20 {
         uint256 _exchangeIndex
     ) public noReentrant onlyOwner {
         // Get all the exchanges from a questioner
-        Exchange[] memory _exchanges = exchanges[_questioner];
+        Exchange[] storage _exchanges = exchanges[_questioner];
 
         // Check that the exchange exists
         require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
@@ -421,7 +421,7 @@ contract AskMi_ERC20 {
         notOwner
     {
         // Get all the exchanges from a questioner
-        Exchange[] memory _exchanges = exchanges[_questioner];
+        Exchange[] storage _exchanges = exchanges[_questioner];
 
         // Check that the exchange exists
         require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
