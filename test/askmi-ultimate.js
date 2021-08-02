@@ -1,12 +1,20 @@
 const { expect } = require('chai')
 const {
-  ethers: { utils, getSigners, getContractFactory },
+  ethers: { utils, getSigners, getContractFactory, constants },
 } = require('hardhat')
 
 describe('AskMiUltimate', () => {
-  let oneEth = utils.parseEther('1.0')
+  // https://docs.ethers.io/v5/api/utils/display-logic/#utils-parseUnits
+  function parseEth(amount) {
+    return utils.parseEther(amount).toString()
+  }
+  function parseDai(amount) {
+    return utils.parseUnits(amount, 18).toString()
+  }
+
   let accounts
   let daiAddress
+
   before(async () => {
     accounts = await getSigners()
 
@@ -16,7 +24,7 @@ describe('AskMiUltimate', () => {
     daiAddress = (await dai).address
 
     // Transfer DAI to second account
-    await dai.transfer(accounts[1].address, '10000000000000000000')
+    await dai.transfer(accounts[1].address, parseDai('1000.0'))
 
     // Deploy askmi
     askmiFactory = await getContractFactory(
@@ -25,13 +33,13 @@ describe('AskMiUltimate', () => {
     askmi = await askmiFactory.deploy(
       accounts[0].address,
       accounts[0].address,
-      ['1000000000000000000']
+      [parseEth('1.0')]
     )
 
     // Approve ERC20 spending
     await dai
       .connect(accounts[1])
-      .approve((await askmi).address, '1000000000000000000000')
+      .approve((await askmi).address, parseDai('1000.0'))
   })
 
   it('has all correct initial values', async () => {
@@ -42,7 +50,7 @@ describe('AskMiUltimate', () => {
 
     expect(fee).eq('200')
     // expect(tiers[0]).eq('1000000000000000000')
-    expect(questioners[0]).eq('0x0000000000000000000000000000000000000000')
+    expect(questioners[0]).eq(constants.AddressZero)
     expect(owner).eq(accounts[0].address)
   })
 
@@ -51,13 +59,13 @@ describe('AskMiUltimate', () => {
     let tiers = await askmi.getTiers(daiAddress)
     expect(tiers.length).eq(0)
 
-    let tx = await askmi.addERC20(daiAddress, ['1000000000000000000'])
+    let tx = await askmi.addERC20(daiAddress, [parseDai('1.0')])
 
     await tx.wait()
 
     tiers = await askmi.getTiers(daiAddress)
 
-    expect(tiers[0].toString()).eq('1000000000000000000')
+    expect(tiers[0].toString()).eq(parseDai('1.0'))
   })
 
   it('ask() works with ETH', async () => {
@@ -67,12 +75,12 @@ describe('AskMiUltimate', () => {
     let tx = await askmi
       .connect(accounts[1])
       .ask(
-        '0x0000000000000000000000000000000000000000',
+        constants.AddressZero,
         '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
         '0x12',
         '0x20',
         0,
-        { value: oneEth }
+        { value: utils.parseEther('1.0') }
       )
     await tx.wait()
 
@@ -129,12 +137,12 @@ describe('AskMiUltimate', () => {
     let tx = await askmi
       .connect(accounts[1])
       .ask(
-        '0x0000000000000000000000000000000000000000',
+        constants.AddressZero,
         '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
         '0x12',
         '0x20',
         0,
-        { value: oneEth }
+        { value: utils.parseEther('1.0') }
       )
 
     await tx.wait()
@@ -184,35 +192,33 @@ describe('AskMiUltimate', () => {
 
   it('updateTiers() work for ETH', async () => {
     // Support is disabled by default
-    let tiers = await askmi.getTiers(
-      '0x0000000000000000000000000000000000000000'
-    )
+    let tiers = await askmi.getTiers(constants.AddressZero)
     expect(tiers.length).eq(1)
-    expect(tiers[0].toString()).eq('1000000000000000000')
+    expect(tiers[0].toString()).eq(parseEth('1.0'))
 
-    let tx = await askmi.updateTiers(
-      '0x0000000000000000000000000000000000000000',
-      ['1000000000000000000', '10000000000000000000']
-    )
+    let tx = await askmi.updateTiers(constants.AddressZero, [
+      parseEth('1.0'),
+      parseEth('10.0'),
+    ])
 
     await tx.wait()
 
-    tiers = await askmi.getTiers('0x0000000000000000000000000000000000000000')
+    tiers = await askmi.getTiers(constants.AddressZero)
 
     expect(tiers.length).eq(2)
-    expect(tiers[0].toString()).eq('1000000000000000000')
-    expect(tiers[1].toString()).eq('10000000000000000000')
+    expect(tiers[0].toString()).eq(parseEth('1.0'))
+    expect(tiers[1].toString()).eq(parseEth('10.0'))
   })
 
   it('updateTiers() work for ERC20', async () => {
     // Support is disabled by default
     let tiers = await askmi.getTiers(daiAddress)
     expect(tiers.length).eq(1)
-    expect(tiers[0].toString()).eq('1000000000000000000')
+    expect(tiers[0].toString()).eq(parseDai('1.0'))
 
     let tx = await askmi.updateTiers(daiAddress, [
-      '1000000000000000000',
-      '10000000000000000000',
+      parseDai('1.0'),
+      parseDai('10.0'),
     ])
 
     await tx.wait()
@@ -220,7 +226,7 @@ describe('AskMiUltimate', () => {
     tiers = await askmi.getTiers(daiAddress)
 
     expect(tiers.length).eq(2)
-    expect(tiers[0].toString()).eq('1000000000000000000')
-    expect(tiers[1].toString()).eq('10000000000000000000')
+    expect(tiers[0].toString()).eq(parseDai('1.0'))
+    expect(tiers[1].toString()).eq(parseDai('10.0'))
   })
 })
