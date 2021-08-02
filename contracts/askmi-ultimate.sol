@@ -18,7 +18,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // @title A question-and-answer smart contract
 // @author Diego Ramos
 contract AskMiUltimate {
-    /** ---------- STRUCTS ---------- */
+    /* ---------- STRUCTS ---------- */
 
     // The multihash representation of an IPFS' CID
     struct Cid {
@@ -37,9 +37,9 @@ contract AskMiUltimate {
         uint256 balance;
     }
 
-    /** ---------- VARIABLES ---------- */
+    /* ---------- VARIABLES ---------- */
 
-    // @notice Find a token and its data using its address
+    // @dev Find a token and its data using its address
     mapping(address => uint256[]) internal tiers;
 
     // @notice The owner of this smart contract
@@ -64,7 +64,7 @@ contract AskMiUltimate {
     // @notice Variable used to prevent re-entrancy
     bool internal locked;
 
-    /** ---------- CONSTRUCTOR ---------- */
+    /* ---------- CONSTRUCTOR ---------- */
 
     // @param _dev The developer's address which receives the dev fee
     // @param _owner The owner of the current contract
@@ -93,11 +93,11 @@ contract AskMiUltimate {
     // Make the smart contract payable
     receive() external payable {}
 
-    /** ---------- EVENTS ---------- */
+    /* ---------- EVENTS ---------- */
 
     event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
 
-    /** ---------- MODIFIERS ---------- */
+    /* ---------- MODIFIERS ---------- */
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Unauthorized: Must be owner.");
@@ -116,7 +116,7 @@ contract AskMiUltimate {
         locked = false;
     }
 
-    /** ---------- GETTER FUNCTIONS ---------- */
+    /* ---------- GETTER FUNCTIONS ---------- */
 
     // @notice Get the complete tiers array
     function getTiers(address _tokenAddress)
@@ -141,7 +141,7 @@ contract AskMiUltimate {
         return exchanges[_questioner];
     }
 
-    /** ---------- UPDATE FUNCTIONS ---------- */
+    /* ---------- UPDATE FUNCTIONS ---------- */
 
     // @notice Update the tiers array
     function updateTiers(address _tokenAddress, uint256[] memory _newTiers)
@@ -160,7 +160,7 @@ contract AskMiUltimate {
         tiers[_tokenAddress] = _newTiers;
     }
 
-    /** ---------- HELPER FUNCTIONS ---------- */
+    /* ---------- HELPER FUNCTIONS ---------- */
 
     // @notice Save the unique addresses of the questioners
     function addQuestioner() internal {
@@ -175,7 +175,7 @@ contract AskMiUltimate {
         }
     }
 
-    /** ---------- PRIMARY FUNCTIONS ---------- */
+    /* ---------- PRIMARY FUNCTIONS ---------- */
 
     function addERC20(address _tokenAddress, uint256[] memory _tiers)
         public
@@ -290,6 +290,28 @@ contract AskMiUltimate {
         // Create a refund variable to return the money deposited
         uint256 refund = _exchanges[_exchangeIndex].balance;
 
+        address _tokenAddress = _exchanges[_exchangeIndex].tokenAddress;
+        // If _tokenAddress is the 0 address, this is an ETH transaction
+        if (_tokenAddress == address(0)) {
+            // Issue refund
+            (bool success, ) = questioner.call{value: refund}("");
+            require(success, "Failed to send Ether");
+        } else {
+            // Check that the ERC20 exists in the lookup table
+            require(
+                tiers[_tokenAddress].length != 0,
+                "This token is not supported."
+            );
+            // Token storage _token = tokens[tokensLookup[_tokenAddress]];
+            IERC20 _token = IERC20(_tokenAddress);
+            // Deposit tokens
+            // Pay the questioner
+            require(
+                _token.transfer(questioner, refund),
+                "Failed to send issue refund."
+            );
+        }
+
         if (_exchanges.length == 1) {
             // In this case, the questioner is removing their last question
             // 1- Remove his address from the questioners array
@@ -354,28 +376,6 @@ contract AskMiUltimate {
             // Remove the last element/duplicate
             _exchanges.pop();
         }
-
-        address _tokenAddress = _exchanges[_exchangeIndex].tokenAddress;
-        // If _tokenAddress is the 0 address, this is an ETH transaction
-        if (_tokenAddress == address(0)) {
-            // Issue refund
-            (bool success, ) = questioner.call{value: refund}("");
-            require(success, "Failed to send Ether");
-        } else {
-            // Check that the ERC20 exists in the lookup table
-            require(
-                tiers[_tokenAddress].length != 0,
-                "This token is not supported."
-            );
-            // Token storage _token = tokens[tokensLookup[_tokenAddress]];
-            IERC20 _token = IERC20(_tokenAddress);
-            // Deposit tokens
-            // Pay the questioner
-            require(
-                _token.transfer(questioner, refund),
-                "Failed to send issue refund."
-            );
-        }
     }
 
     // @notice The owner answers a question
@@ -405,21 +405,6 @@ contract AskMiUltimate {
         uint256 devFee = (_balance) / fee;
         uint256 payment = _balance - devFee;
 
-        Cid memory _answer = Cid({
-            digest: _digest,
-            hashFunction: _hashFunction,
-            size: _size
-        });
-
-        // Get the selected exchange
-        Exchange memory _exchange = _exchanges[_exchangeIndex];
-
-        // Update the selected exchange
-        _exchange.answer = _answer;
-        _exchange.balance = 0;
-
-        _exchanges[_exchangeIndex] = _exchange;
-
         address _tokenAddress = _exchanges[_exchangeIndex].tokenAddress;
         // If _tokenAddress is the 0 address, this is an ETH transaction
         if (_tokenAddress == address(0)) {
@@ -442,6 +427,21 @@ contract AskMiUltimate {
             require(_token.transfer(owner, payment), "Failed to pay owner.");
             require(_token.transfer(dev, devFee), "Failed to pay developer.");
         }
+
+        Cid memory _answer = Cid({
+            digest: _digest,
+            hashFunction: _hashFunction,
+            size: _size
+        });
+
+        // Get the selected exchange
+        Exchange memory _exchange = _exchanges[_exchangeIndex];
+
+        // Update the selected exchange
+        _exchange.answer = _answer;
+        _exchange.balance = 0;
+
+        _exchanges[_exchangeIndex] = _exchange;
 
         emit QuestionAnswered(_questioner, _exchangeIndex);
     }

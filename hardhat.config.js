@@ -18,9 +18,9 @@ const { MUMBAI_API_URL, ROPSTEN_API_URL, PRIVATE_KEY } = process.env
 
 module.exports = {
   solidity: '0.8.0',
-  defaultNetwork: 'ropsten',
+  // defaultNetwork: 'ropsten',
   networks: {
-    hardhat: {},
+    // hardhat: {},
     ropsten: {
       url: ROPSTEN_API_URL,
       accounts: [`0x${PRIVATE_KEY}`],
