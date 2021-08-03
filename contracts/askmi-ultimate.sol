@@ -186,22 +186,29 @@ contract AskMiUltimate {
         uint256 _tipAndTiersSize = _tipAndTiers.length;
 
         if (_tipAndTiersSize == 0) {
-            // Drop support for an ERC20 token.
+            // Drop support for ETH or an ERC20 token.
             tipAndTiers[_tokenAddress] = _tipAndTiers;
             // Delete token and shrink array
-            if (supportedTokens.length != 0 || supportedTokens.length == 1) {
-                supportedTokens.pop();
-            }
-            if (supportedTokens.length != 0 || supportedTokens.length >= 1) {
-                address lastToken = supportedTokens[supportedTokens.length - 1];
+            if (supportedTokens.length != 0) {
+                if (supportedTokens.length == 1) {
+                    supportedTokens.pop();
+                } else {
+                    {
+                        address lastAddress = supportedTokens[
+                            supportedTokens.length - 1
+                        ];
 
-                uint256 indexToBeReplaced = supportedTokensIndex[_tokenAddress];
+                        uint256 indexToBeReplaced = supportedTokensIndex[
+                            _tokenAddress
+                        ];
 
-                supportedTokensIndex[lastToken] = indexToBeReplaced;
+                        supportedTokensIndex[lastAddress] = indexToBeReplaced;
 
-                supportedTokens[indexToBeReplaced] = lastToken;
+                        supportedTokens[indexToBeReplaced] = lastAddress;
 
-                supportedTokens.pop();
+                        supportedTokens.pop();
+                    }
+                }
             }
         } else {
             if (tipAndTiers[_tokenAddress].length == 0) {
