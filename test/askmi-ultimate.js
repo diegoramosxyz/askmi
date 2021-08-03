@@ -1,4 +1,7 @@
-const { expect } = require('chai')
+const chai = require('chai')
+chai.use(require('chai-as-promised'))
+const { expect } = chai
+
 const {
   ethers: { utils, getSigners, getContractFactory, constants },
 } = require('hardhat')
@@ -30,10 +33,15 @@ describe('AskMiUltimate', () => {
     askmiFactory = await getContractFactory(
       'contracts/askmi-ultimate.sol:AskMiUltimate'
     )
+    // Test deploying the contract with support for neither
+    // ETH not ERC20.
+    // This effectively closes the contract for no further
+    // interactions
     askmi = await askmiFactory.deploy(
       accounts[0].address,
       accounts[0].address,
-      [parseEth('1.0')]
+      []
+      // [parseEth('1.0')]
     )
 
     // Approve ERC20 spending
@@ -45,33 +53,93 @@ describe('AskMiUltimate', () => {
   it('has all correct initial values', async () => {
     let fee = await askmi.fee()
     let questioners = await askmi.getQuestioners()
-    // let tiers = await askmi.tiers(daiAddress)
+    let tipAndTiers = await askmi.getTipAndTiers(constants.AddressZero)
     let owner = await askmi.owner()
 
     expect(fee).eq('200')
-    // expect(tiers[0]).eq('1000000000000000000')
+    expect(tipAndTiers.length).eq(0)
     expect(questioners[0]).eq(constants.AddressZero)
     expect(owner).eq(accounts[0].address)
   })
 
-  it('addERC20() works', async () => {
-    // Support is disabled by default
-    let tiers = await askmi.getTiers(daiAddress)
-    expect(tiers.length).eq(0)
+  it('supportedTokens() returns no tokens', async () => {
+    let supportedTokens = await askmi.getSupportedTokens()
+    expect(supportedTokens.length).eq(0)
+  })
 
-    let tx = await askmi.addERC20(daiAddress, [parseDai('1.0')])
+  it('ask() fails because ETH is not supported', async () => {
+    await expect(
+      askmi
+        .connect(accounts[1])
+        .ask(
+          constants.AddressZero,
+          '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
+          '0x12',
+          '0x20',
+          1,
+          { value: utils.parseEther('0') }
+        )
+    ).to.be.rejected
+
+    questions = await askmi.getQuestions(accounts[1].address)
+
+    expect(questions.length).eq(0)
+  })
+
+  it('ask() fails because ERC20 is not supported', async () => {
+    await expect(
+      askmi
+        .connect(accounts[1])
+        .ask(
+          daiAddress,
+          '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
+          '0x12',
+          '0x20',
+          1
+        )
+    ).to.be.rejected
+
+    questions = await askmi.getQuestions(accounts[1].address)
+
+    expect(questions.length).eq(0)
+  })
+
+  it('updateTipAndTiers() works for ETH', async () => {
+    let tx = await askmi.updateTipAndTiers(constants.AddressZero, [
+      parseEth('0.01'),
+      parseEth('1.0'),
+    ])
 
     await tx.wait()
 
-    tiers = await askmi.getTiers(daiAddress)
+    let tipAndTiers = await askmi.getTipAndTiers(constants.AddressZero)
 
-    expect(tiers[0].toString()).eq(parseDai('1.0'))
+    expect(tipAndTiers.length).eq(2)
   })
 
-  it('ask() works with ETH', async () => {
-    let questions = await askmi.getQuestions(accounts[1].address)
-    expect(questions.length).eq(0)
+  it('updateTipAndTiers() works for ERC20', async () => {
+    let tx = await askmi.updateTipAndTiers(daiAddress, [
+      parseDai('1.0'),
+      parseDai('10.0'),
+      parseDai('25.0'),
+    ])
 
+    await tx.wait()
+
+    tipAndTiers = await askmi.getTipAndTiers(daiAddress)
+
+    expect(tipAndTiers.length).eq(3)
+  })
+
+  it('supportedTokens() returns tokens', async () => {
+    let supportedTokens = await askmi.getSupportedTokens()
+
+    expect(supportedTokens[0]).eq(constants.AddressZero)
+    expect(supportedTokens[1]).eq(daiAddress)
+    expect(supportedTokens.length).eq(2)
+  })
+
+  it('ask() works for ETH', async () => {
     let tx = await askmi
       .connect(accounts[1])
       .ask(
@@ -79,9 +147,10 @@ describe('AskMiUltimate', () => {
         '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
         '0x12',
         '0x20',
-        0,
+        1,
         { value: utils.parseEther('1.0') }
       )
+
     await tx.wait()
 
     questions = await askmi.getQuestions(accounts[1].address)
@@ -89,10 +158,7 @@ describe('AskMiUltimate', () => {
     expect(questions.length).eq(1)
   })
 
-  it('ask() works with ERC20', async () => {
-    let questions = await askmi.getQuestions(accounts[1].address)
-    expect(questions.length).eq(1)
-
+  it('ask() works for ERC20', async () => {
     let tx = await askmi
       .connect(accounts[1])
       .ask(
@@ -100,7 +166,7 @@ describe('AskMiUltimate', () => {
         '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
         '0x12',
         '0x20',
-        0
+        1
       )
     await tx.wait()
 
@@ -141,7 +207,7 @@ describe('AskMiUltimate', () => {
         '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
         '0x12',
         '0x20',
-        0,
+        1,
         { value: utils.parseEther('1.0') }
       )
 
@@ -170,7 +236,7 @@ describe('AskMiUltimate', () => {
         '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
         '0x12',
         '0x20',
-        0
+        1
       )
 
     await tx.wait()
@@ -190,43 +256,25 @@ describe('AskMiUltimate', () => {
     expect(questions.length).eq(2)
   })
 
-  it('updateTiers() work for ETH', async () => {
-    // Support is disabled by default
-    let tiers = await askmi.getTiers(constants.AddressZero)
-    expect(tiers.length).eq(1)
-    expect(tiers[0].toString()).eq(parseEth('1.0'))
-
-    let tx = await askmi.updateTiers(constants.AddressZero, [
-      parseEth('1.0'),
-      parseEth('10.0'),
-    ])
+  it('issueTip() works for ETH', async () => {
+    let tx = await askmi
+      .connect(accounts[1])
+      .issueTip(accounts[1].address, 0, { value: utils.parseEther('0.01') })
 
     await tx.wait()
 
-    tiers = await askmi.getTiers(constants.AddressZero)
+    questions = await askmi.getQuestions(accounts[1].address)
 
-    expect(tiers.length).eq(2)
-    expect(tiers[0].toString()).eq(parseEth('1.0'))
-    expect(tiers[1].toString()).eq(parseEth('10.0'))
+    expect(questions[0].tips.toString()).eq('1')
   })
 
-  it('updateTiers() work for ERC20', async () => {
-    // Support is disabled by default
-    let tiers = await askmi.getTiers(daiAddress)
-    expect(tiers.length).eq(1)
-    expect(tiers[0].toString()).eq(parseDai('1.0'))
-
-    let tx = await askmi.updateTiers(daiAddress, [
-      parseDai('1.0'),
-      parseDai('10.0'),
-    ])
+  it('issueTip() works for ERC20', async () => {
+    let tx = await askmi.connect(accounts[1]).issueTip(accounts[1].address, 1)
 
     await tx.wait()
 
-    tiers = await askmi.getTiers(daiAddress)
+    questions = await askmi.getQuestions(accounts[1].address)
 
-    expect(tiers.length).eq(2)
-    expect(tiers[0].toString()).eq(parseDai('1.0'))
-    expect(tiers[1].toString()).eq(parseDai('10.0'))
+    expect(questions[1].tips.toString()).eq('1')
   })
 })

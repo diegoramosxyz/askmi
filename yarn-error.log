@@ -1,8 +1,8 @@
 Arguments: 
-  /usr/local/bin/node /usr/local/bin/yarn add -D dotenv
+  /usr/local/bin/node /usr/local/bin/yarn add -D chai-as-promised
 
 PATH: 
-  /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+  /home/dog/.local/bin:/home/dog/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
 
 Yarn version: 
   1.22.10
@@ -14,8 +14,15 @@ Platform:
   linux x64
 
 Trace: 
-  Error: connect ECONNREFUSED 104.16.20.35:443
-      at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1133:16)
+  Error: connect ENETUNREACH 104.16.26.35:443 - Local (0.0.0.0:0)
+      at internalConnect (node:net:905:16)
+      at defaultTriggerAsyncIdScope (node:internal/async_hooks:435:18)
+      at emitLookup (node:net:1051:9)
+      at /usr/local/lib/node_modules/yarn/lib/cli.js:107131:28
+      at /usr/local/lib/node_modules/yarn/lib/cli.js:107040:13
+      at RawTask.module.exports.RawTask.call (/usr/local/lib/node_modules/yarn/lib/cli.js:83614:19)
+      at flush (/usr/local/lib/node_modules/yarn/lib/cli.js:83696:29)
+      at processTicksAndRejections (node:internal/process/task_queues:78:11)
 
 npm manifest: 
   {
@@ -27,9 +34,13 @@ npm manifest:
       "@nomiclabs/hardhat-ethers": "^2.0.0",
       "@nomiclabs/hardhat-waffle": "^2.0.0",
       "chai": "^4.2.0",
+      "dotenv": "^10.0.0",
       "ethereum-waffle": "^3.0.0",
       "ethers": "^5.0.0",
       "hardhat": "^2.4.1"
+    },
+    "dependencies": {
+      "@openzeppelin/contracts": "^4.2.0"
     }
   }
 
@@ -546,6 +557,11 @@ Lockfile:
     dependencies:
       "@types/sinon-chai" "^3.2.3"
       "@types/web3" "1.0.19"
+  
+  "@openzeppelin/contracts@^4.2.0":
+    version "4.2.0"
+    resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.2.0.tgz#260d921d99356e48013d9d760caaa6cea35dc642"
+    integrity sha512-LD4NnkKpHHSMo5z9MvFsG4g1xxZUDqV3A3Futu3nvyfs4wPwXxqOgMaxOoa2PeyGL2VNeSlbxT54enbQzGcgJQ==
   
   "@resolver-engine/core@^0.3.3":
     version "0.3.3"
@@ -2518,6 +2534,11 @@ Lockfile:
     version "0.1.2"
     resolved "https://registry.yarnpkg.com/dom-walk/-/dom-walk-0.1.2.tgz#0c548bef048f4d1f2a97249002236060daa3fd84"
     integrity sha512-6QvTW9mrGeIegrFXdtQi9pk7O/nSK6lSdXW2eqUspN5LWD7UTji2Fqw5V2YLjBpHEoU9Xl/eUWNpDeZvoyOv2w==
+  
+  dotenv@^10.0.0:
+    version "10.0.0"
+    resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-10.0.0.tgz#3d4227b8fb95f81096cdd2b66653fb2c7085ba81"
+    integrity sha512-rlBi9d8jpv9Sf1klPjNfFAuWDjKLwTIJJ/VxtoTwIR6hnZxcEOQCZg2oIL3MWBYw5GpUDKOEnND7LXTbIpQ03Q==
   
   dotignore@~0.1.2:
     version "0.1.2"

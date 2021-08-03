@@ -15,6 +15,26 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // EXCHANGE: The exchange between the questioner asking
 // as question and the responder answering
 
+// ERRORS CODES
+// 1: Tiers amount exceeds the maximum of 9.
+// 2: Attempted to add a tier of cost 0.
+// 3: Must be owner to call function.
+// 4: Must not be owner to call function.
+// 5: Re-entrancy not allowed.
+// 6: Attempted to update tiers but did not include
+// a tip price and at least on tier price
+// 7: The tiers index start at index 1
+// 8: The selected tier does not exist
+// 9: The deposit is not equal to the tier price
+// 10: This token is not supported
+// 11: Error transfering funds ERC20
+// 12: No questions available to remove
+// 13: Selected question does not exist
+// 14: Question has already been answered
+// 15: Failed to send Ether
+// 16: Exchange does not exist
+// 17: The tip amount is incorrect.
+
 // @title A question-and-answer smart contract
 // @author Diego Ramos
 contract AskMiUltimate {
@@ -35,34 +55,39 @@ contract AskMiUltimate {
         // The balance in wei paid to the owner for a response
         // This will vary depending on the price tiers
         uint256 balance;
+        uint256 tips;
     }
 
     /* ---------- VARIABLES ---------- */
 
+    address[] private supportedTokens;
+
+    mapping(address => uint256) private supportedTokensIndex;
+
     // @dev Find a token and its data using its address
-    mapping(address => uint256[]) internal tiers;
+    mapping(address => uint256[]) private tipAndTiers;
 
     // @notice The owner of this smart contract
     address public owner;
 
     // @notice The developer's address which receives the dev fee
-    address internal dev;
+    address private dev;
 
     // @notice The fee sent to the developer (balance/200 = 0.5%)
     uint256 public fee = 200;
 
     // @notice The list of questions from a questioner
-    mapping(address => Exchange[]) internal exchanges;
+    mapping(address => Exchange[]) private exchanges;
 
     // @notice Helper mapping to find specific questioners
     // This is used to modify the questioners array
-    mapping(address => uint256) internal questionersIndex;
+    mapping(address => uint256) private questionersIndex;
 
     // @notice An array of all unique addresses which have asked a question
-    address[] internal questioners;
+    address[] private questioners;
 
     // @notice Variable used to prevent re-entrancy
-    bool internal locked;
+    bool private locked;
 
     /* ---------- CONSTRUCTOR ---------- */
 
@@ -72,22 +97,18 @@ contract AskMiUltimate {
     constructor(
         address _dev,
         address _owner,
-        uint256[] memory _tiers
+        uint256[] memory _tipAndTiers
     ) {
-        uint256 _tiersSize = _tiers.length;
-        require(_tiersSize >= 1, "There must be at least one tier.");
-        for (uint256 i = 0; i < _tiersSize; i++) {
-            require(_tiers[i] > 0, "The tier price must be greater than 0.");
-        }
+        checkTipAndTiers(address(0), _tipAndTiers);
 
         dev = _dev;
         owner = _owner;
 
-        // Save default tiers
-        tiers[address(0)] = _tiers;
-
         // Occupy the first index
         questioners.push(address(0));
+        if (_tipAndTiers.length >= 2) {
+            supportedTokens.push(address(0));
+        }
     }
 
     // Make the smart contract payable
@@ -100,17 +121,17 @@ contract AskMiUltimate {
     /* ---------- MODIFIERS ---------- */
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Unauthorized: Must be owner.");
+        require(msg.sender == owner, "3");
         _;
     }
 
     modifier notOwner() {
-        require(msg.sender != owner, "Unauthorized: Must not be owner.");
+        require(msg.sender != owner, "4");
         _;
     }
 
     modifier noReentrant() {
-        require(!locked, "No re-entrancy.");
+        require(!locked, "5");
         locked = true;
         _;
         locked = false;
@@ -119,22 +140,27 @@ contract AskMiUltimate {
     /* ---------- GETTER FUNCTIONS ---------- */
 
     // @notice Get the complete tiers array
-    function getTiers(address _tokenAddress)
-        public
+    function getSupportedTokens() external view returns (address[] memory) {
+        return supportedTokens;
+    }
+
+    // @notice Get the complete tiers array
+    function getTipAndTiers(address _tokenAddress)
+        external
         view
         returns (uint256[] memory)
     {
-        return tiers[_tokenAddress];
+        return tipAndTiers[_tokenAddress];
     }
 
     // @notice Get the complete questioners array.
-    function getQuestioners() public view returns (address[] memory) {
+    function getQuestioners() external view returns (address[] memory) {
         return questioners;
     }
 
     // @notice Get all of the questions asked by one questioner
     function getQuestions(address _questioner)
-        public
+        external
         view
         returns (Exchange[] memory)
     {
@@ -143,27 +169,58 @@ contract AskMiUltimate {
 
     /* ---------- UPDATE FUNCTIONS ---------- */
 
-    // @notice Update the tiers array
-    function updateTiers(address _tokenAddress, uint256[] memory _newTiers)
-        public
-        onlyOwner
-    {
-        uint256 _tiersSize = _newTiers.length;
-
-        require(_tiersSize >= 1, "There must be at least one tier.");
-        // Not bounded for loop. It could theoretically become so big it runs
-        // out of gas. That would be the owners fault only.
-        for (uint256 i = 0; i < _tiersSize; i++) {
-            require(_newTiers[i] > 0, "The tier price must be greater than 0.");
-        }
-
-        tiers[_tokenAddress] = _newTiers;
+    // @notice Update the tip and tiers array
+    function updateTipAndTiers(
+        address _tokenAddress,
+        uint256[] memory _newTipAndTiers
+    ) external onlyOwner {
+        checkTipAndTiers(_tokenAddress, _newTipAndTiers);
     }
 
     /* ---------- HELPER FUNCTIONS ---------- */
 
+    function checkTipAndTiers(
+        address _tokenAddress,
+        uint256[] memory _tipAndTiers
+    ) private {
+        uint256 _tipAndTiersSize = _tipAndTiers.length;
+
+        if (_tipAndTiersSize == 0) {
+            // Drop support for an ERC20 token.
+            tipAndTiers[_tokenAddress] = _tipAndTiers;
+            // Delete token and shrink array
+            if (supportedTokens.length != 0 || supportedTokens.length == 1) {
+                supportedTokens.pop();
+            }
+            if (supportedTokens.length != 0 || supportedTokens.length >= 1) {
+                address lastToken = supportedTokens[supportedTokens.length - 1];
+
+                uint256 indexToBeReplaced = supportedTokensIndex[_tokenAddress];
+
+                supportedTokensIndex[lastToken] = indexToBeReplaced;
+
+                supportedTokens[indexToBeReplaced] = lastToken;
+
+                supportedTokens.pop();
+            }
+        } else {
+            if (tipAndTiers[_tokenAddress].length == 0) {
+                // Push to array for new supported tokens
+                supportedTokensIndex[_tokenAddress] = supportedTokens.length;
+                supportedTokens.push(_tokenAddress);
+            }
+            require(_tipAndTiersSize >= 2, "6");
+            require(_tipAndTiersSize <= 10, "1");
+            for (uint256 i = 0; i < _tipAndTiersSize; i++) {
+                require(_tipAndTiers[i] > 0, "2");
+            }
+
+            tipAndTiers[_tokenAddress] = _tipAndTiers;
+        }
+    }
+
     // @notice Save the unique addresses of the questioners
-    function addQuestioner() internal {
+    function addQuestioner() private {
         // Only push a new address into the array if it does NOT contain
         // the selected address
         if (msg.sender != address(0) && questionersIndex[msg.sender] == 0) {
@@ -177,19 +234,6 @@ contract AskMiUltimate {
 
     /* ---------- PRIMARY FUNCTIONS ---------- */
 
-    function addERC20(address _tokenAddress, uint256[] memory _tiers)
-        public
-        onlyOwner
-    {
-        // Check that the token hasn't been added
-        require(
-            tiers[_tokenAddress].length == 0 && _tokenAddress != address(0),
-            "This ERC20 has already been added."
-        );
-
-        tiers[_tokenAddress] = _tiers;
-    }
-
     // @notice Ask a question to the RESPONDER
     // @param _digest The digest output of hash function in hex with prepended '0x'
     // @param _hashFunction The hash function code for the function used
@@ -201,21 +245,16 @@ contract AskMiUltimate {
         uint256 _hashFunction,
         uint256 _size,
         uint256 _tierIndex
-    ) public payable notOwner {
-        uint256[] memory _tiers = tiers[_tokenAddress];
+    ) external payable notOwner {
+        require(_tierIndex != 0, "7");
+        uint256[] memory _tipAndTiers = tipAndTiers[_tokenAddress];
+        require(_tierIndex < _tipAndTiers.length, "8");
         // If _tokenAddress is the 0 address, this is an ETH transaction
         if (_tokenAddress == address(0)) {
-            require(
-                _tierIndex < _tiers.length,
-                "The selected tier does not exist."
-            );
-            require(
-                msg.value == _tiers[_tierIndex],
-                "The deposit is not equal to the tier price."
-            );
+            require(msg.value == _tipAndTiers[_tierIndex], "9");
         } else {
             // Check that the ERC20 exists in the lookup table
-            require(_tiers.length != 0, "This token is not supported.");
+            require(_tipAndTiers.length != 0, "10");
             // Token storage _token = tokens[tokensLookup[_tokenAddress]];
             IERC20 _token = IERC20(_tokenAddress);
             // Deposit tokens
@@ -223,9 +262,9 @@ contract AskMiUltimate {
                 _token.transferFrom(
                     msg.sender,
                     address(this),
-                    _tiers[_tierIndex]
+                    _tipAndTiers[_tierIndex]
                 ),
-                "Error transfering funds."
+                "11"
             );
         }
 
@@ -248,8 +287,9 @@ contract AskMiUltimate {
                 question: _question,
                 answer: _answer,
                 tokenAddress: _tokenAddress,
-                balance: _tiers[_tierIndex],
-                exchangeIndex: exchanges[msg.sender].length
+                balance: _tipAndTiers[_tierIndex],
+                exchangeIndex: exchanges[msg.sender].length,
+                tips: 0
             })
         );
     }
@@ -259,7 +299,7 @@ contract AskMiUltimate {
     // TODO: Maybe have the responder receive a fraction of the refund if the
     // questioner removes the question
     function removeQuestion(address _questioner, uint256 _exchangeIndex)
-        public
+        external
         noReentrant
     {
         // Only allow the owner to remove questions from any questioner
@@ -274,17 +314,17 @@ contract AskMiUltimate {
         Exchange[] storage _exchanges = exchanges[questioner];
 
         // Stop execution if the questioner has no questions
-        require(_exchanges.length > 0, "No questions available to remove.");
+        require(_exchanges.length > 0, "12");
 
         // Check that the question exists
-        require(_exchangeIndex < _exchanges.length, "Question does not exist.");
+        require(_exchangeIndex < _exchanges.length, "13");
 
         // Check that the question has not been answered
         // An empty string is the default value for a string
         require(
             keccak256(bytes(_exchanges[_exchangeIndex].answer.digest)) ==
                 keccak256(bytes("")),
-            "Question already answered."
+            "14"
         );
 
         // Create a refund variable to return the money deposited
@@ -295,21 +335,15 @@ contract AskMiUltimate {
         if (_tokenAddress == address(0)) {
             // Issue refund
             (bool success, ) = questioner.call{value: refund}("");
-            require(success, "Failed to send Ether");
+            require(success, "15");
         } else {
             // Check that the ERC20 exists in the lookup table
-            require(
-                tiers[_tokenAddress].length != 0,
-                "This token is not supported."
-            );
+            require(tipAndTiers[_tokenAddress].length != 0, "10");
             // Token storage _token = tokens[tokensLookup[_tokenAddress]];
             IERC20 _token = IERC20(_tokenAddress);
             // Deposit tokens
             // Pay the questioner
-            require(
-                _token.transfer(questioner, refund),
-                "Failed to send issue refund."
-            );
+            require(_token.transfer(questioner, refund), "11");
         }
 
         if (_exchanges.length == 1) {
@@ -391,12 +425,12 @@ contract AskMiUltimate {
         uint256 _hashFunction,
         uint256 _size,
         uint256 _exchangeIndex
-    ) public noReentrant onlyOwner {
+    ) external noReentrant onlyOwner {
         // Get all the exchanges from a questioner
         Exchange[] storage _exchanges = exchanges[_questioner];
 
         // Check that the exchange exists
-        require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
+        require(_exchangeIndex < _exchanges.length, "16");
 
         // Get the balance of the selected exchange
         uint256 _balance = _exchanges[_exchangeIndex].balance;
@@ -410,22 +444,19 @@ contract AskMiUltimate {
         if (_tokenAddress == address(0)) {
             // Pay the owner of the contract (The Responder)
             (bool success, ) = owner.call{value: payment}("");
-            require(success, "Failed to send Ether");
+            require(success, "15");
             // Pay dev fee
             (bool devSuccess, ) = dev.call{value: devFee}("");
-            require(devSuccess, "Failed to send Ether");
+            require(devSuccess, "15");
         } else {
             // Check that the ERC20 exists in the lookup table
-            require(
-                tiers[_tokenAddress].length != 0,
-                "This token is not supported."
-            );
+            require(tipAndTiers[_tokenAddress].length != 0, "10");
 
             IERC20 _token = IERC20(_tokenAddress);
 
             // Pay the owner of the contract (The Responder)
-            require(_token.transfer(owner, payment), "Failed to pay owner.");
-            require(_token.transfer(dev, devFee), "Failed to pay developer.");
+            require(_token.transfer(owner, payment), "11");
+            require(_token.transfer(dev, devFee), "11");
         }
 
         Cid memory _answer = Cid({
@@ -444,5 +475,49 @@ contract AskMiUltimate {
         _exchanges[_exchangeIndex] = _exchange;
 
         emit QuestionAnswered(_questioner, _exchangeIndex);
+    }
+
+    // @notice Tip an exchange to highlight helpful content
+    function issueTip(address _questioner, uint256 _exchangeIndex)
+        external
+        payable
+        notOwner
+        noReentrant
+    {
+        // Get all the exchanges from a questioner
+        Exchange[] storage _exchanges = exchanges[_questioner];
+
+        // Check that the exchange exists
+        require(_exchangeIndex < _exchanges.length, "16");
+
+        // Pay the owner of the contract (The Responder)
+        // TODO: Split the tip among the responder, the questioner and the dev
+        address _tokenAddress = _exchanges[_exchangeIndex].tokenAddress;
+        uint256 _tip = tipAndTiers[_tokenAddress][0];
+        // If _tokenAddress is the 0 address, this is an ETH transaction
+        if (_tokenAddress == address(0)) {
+            // Check that the tip amount is correct
+            require(msg.value == _tip, "17");
+            (bool success, ) = owner.call{value: msg.value}("");
+            require(success, "15");
+        } else {
+            // Check that the ERC20 exists in the lookup table
+            require(tipAndTiers[_tokenAddress][0] > 0, "10");
+            // Token storage _token = tokens[tipAndTiers[_tokenAddress]];
+            IERC20 _token = IERC20(_tokenAddress);
+
+            require(_token.transferFrom(msg.sender, owner, _tip), "11");
+        }
+
+        // Get the selected exchange
+        Exchange memory _exchange = _exchanges[_exchangeIndex];
+
+        // Increment the tip count
+        _exchange.tips = _exchanges[_exchangeIndex].tips + 1;
+
+        // Update the selected exchange
+        _exchanges[_exchangeIndex] = _exchange;
+
+        // emit TipIssued(msg.sender, _questioner, _exchangeIndex);
     }
 }
