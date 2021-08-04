@@ -41,18 +41,24 @@ contract AskMiFactoryUltimate {
         return askMis[askMiIndex];
     }
 
-    function instantiateAskMi(uint256[] memory _tipAndTiers) public {
+    function instantiateAskMi(
+        uint256[] memory _tiers,
+        uint256 _tip,
+        address _token
+    ) public {
         // Only allow one AskMi instance per address
         require(askMisLookup[msg.sender] == 0, "2");
-        uint256 _tipAndTiersSize = _tipAndTiers.length;
+        uint256 _tiersSize = _tiers.length;
         // Check that the tiers array is not empty and not bigger than 3
-        require(_tipAndTiersSize != 1 && _tipAndTiersSize <= 10, "3");
+        require(_tiersSize != 1 && _tiersSize <= 10, "3");
 
         // Instantiate AskMi contract
         AskMiUltimate _askMi = new AskMiUltimate(
             owner,
             msg.sender,
-            _tipAndTiers
+            _tiers,
+            _tip,
+            _token
         );
 
         // Save the owner's index
