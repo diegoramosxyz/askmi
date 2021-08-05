@@ -9,11 +9,11 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // expertise, social media and others
 
 // ERRORS CODES
-// ERR1: Tiers amount exceeds the maximum of 9.
-// ERR2: Attempted to add a tier of cost 0.
-// ERR3: Must be owner to call function.
-// ERR4: Must not be owner to call function.
-// ERR5: Re-entrancy not allowed.
+// ERR1: Tiers amount exceeds the maximum of 9
+// ERR2: Attempted to add a tier of cost 0
+// ERR3: Must be owner to call function
+// ERR4: Must not be owner to call function
+// ERR5: Re-entrancy not allowed
 // ERR6: Attempted to update tiers but did not include
 // ERRa tip price and at least on tier price
 // ERR7: The tiers index start at index 1
@@ -26,12 +26,14 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // ERR14: Question has already been answered
 // ERR15: Failed to send Ether
 // ERR16: Exchange does not exist
-// ERR17: The tip amount is incorrect.
+// ERR17: The tip amount is incorrect
+// ERR18: Cannot ask questions because the ask() function has been disabled
 
 // @title Functions used to update the state of an AskMi instance
 // @author Diego Ramos
 contract AskMiFunctions {
     /* ---------- VARIABLES ---------- */
+
     // @notice The owner of this smart contract (askmi instance)
     address public _owner;
 
@@ -47,8 +49,8 @@ contract AskMiFunctions {
     // @dev Address designated to receive all dev fees
     address private _developer;
 
-    // @notice The dev fee percentage (balance/200 = 0.5%)
-    uint256 public _fee = 200;
+    // @notice The dev fee percentage
+    Fees public _fees;
 
     // @notice An array of all unique addresses which have asked a question
     address[] private _questioners;
@@ -82,13 +84,16 @@ contract AskMiFunctions {
         uint256 tip;
     }
 
+    struct Fees {
+        uint256 removal;
+        uint256 developer;
+    }
+
     struct Exchange {
         Cid question;
         Cid answer;
         address token;
-        uint256 exchangeIndex;
-        // The balance in wei paid to the owner for a response
-        // This will vary depending on the price tiers
+        uint256 index;
         uint256 balance;
         uint256 tips;
     }
@@ -125,24 +130,20 @@ contract AskMiFunctions {
         external
         onlyOwner
     {
-        checkTiers(token, tiers);
-    }
-
-    /* ---------- HELPER FUNCTIONS ---------- */
-
-    // @notice Check that the input tiers are correct and update the supportedTokens set
-    function checkTiers(address token, uint256[] memory tiers) private {
         uint256 length = tiers.length;
 
+        // If the input tiers array is empty support for the token will be dropped
         if (length == 0) {
-            // Drop support for ETH or an ERC20 token.
+            // Drop support for a token
             _tiers[token] = tiers;
-            // Delete token and shrink array
+            // Drop the selected token from _supportedTokens
             if (_supportedTokens.length != 0) {
                 if (_supportedTokens.length == 1) {
+                    // If there is only one address, just pop()
                     _supportedTokens.pop();
                 } else {
                     {
+                        // If there is more than one address, drop and shrink array
                         address lastAddress = _supportedTokens[
                             _supportedTokens.length - 1
                         ];
@@ -161,7 +162,7 @@ contract AskMiFunctions {
             }
         } else {
             if (_tiers[token].length == 0) {
-                // Push to array for new supported tokens
+                // Update the _supportedTokens if needed
                 _supportedTokensIndex[token] = _supportedTokens.length;
                 _supportedTokens.push(token);
             }
@@ -170,9 +171,12 @@ contract AskMiFunctions {
                 require(tiers[i] > 0, "2");
             }
 
+            // Add or update support for a token
             _tiers[token] = tiers;
         }
     }
+
+    /* ---------- HELPER FUNCTIONS ---------- */
 
     // @notice Save the unique addresses of the questioners
     function addQuestioner() private {
@@ -182,7 +186,7 @@ contract AskMiFunctions {
             // The min. value for the length of the array is 1, because
             // index 0 of the array always contains address(0)
             _questionersIndex[msg.sender] = _questioners.length;
-            // Append the questioner to the questioners array
+
             _questioners.push(msg.sender);
         }
     }
@@ -194,28 +198,31 @@ contract AskMiFunctions {
     // @param digest The digest output of hash function in hex with prepended '0x'
     // @param hashFunction The hash function code for the function used
     // @param size The length of digest
-    // @param tierIndex The index of the selected tier in the _tiers array
+    // @param index The index of the selected tier in the _tiers array
     function ask(
         address token,
         string memory digest,
         uint256 hashFunction,
         uint256 size,
-        uint256 tierIndex
+        uint256 index
     ) external payable notOwner {
         require(!_disabled, "");
+
         uint256[] memory tiers = _tiers[token];
-        require(tierIndex < tiers.length, "ERR8");
-        // If token is the 0 address, this is an ETH transaction
+
+        // Check that the tier exists
+        require(index < tiers.length, "ERR8");
+
         if (token == address(0)) {
-            require(msg.value == tiers[tierIndex], "ERR9");
+            require(msg.value == tiers[index], "ERR9");
         } else {
-            // Check that the ERC20 exists in the lookup table
+            // Check that the input ERC20 is supported
             require(tiers.length != 0, "ERR10");
 
             IERC20 erc20 = IERC20(token);
-            // Deposit tokens
+
             require(
-                erc20.transferFrom(msg.sender, address(this), tiers[tierIndex]),
+                erc20.transferFrom(msg.sender, address(this), tiers[index]),
                 "ERR11"
             );
         }
@@ -223,7 +230,6 @@ contract AskMiFunctions {
         // Save new questioners
         addQuestioner();
 
-        // Create Cid object from argumets
         Cid memory question = Cid({
             digest: digest,
             hashFunction: hashFunction,
@@ -233,14 +239,14 @@ contract AskMiFunctions {
         // Initialize answer object with default values
         Cid memory answer;
 
-        // Initialize the exchange object
+        // Save the new exchange
         _exchanges[msg.sender].push(
             Exchange({
                 question: question,
                 answer: answer,
                 token: token,
-                balance: tiers[tierIndex],
-                exchangeIndex: _exchanges[msg.sender].length,
+                balance: tiers[index],
+                index: _exchanges[msg.sender].length,
                 tips: 0
             })
         );
@@ -248,11 +254,8 @@ contract AskMiFunctions {
 
     // @notice The questioner or the responder can remove a question and a refund is issued
     // @param questioner The questioner's address
-    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
-    function remove(address questioner, uint256 exchangeIndex)
-        external
-        noReentrant
-    {
+    // @param index Index of the selected exchange in the questioners' exchanges array
+    function remove(address questioner, uint256 index) external noReentrant {
         // Only allow the owner to remove questions from any questioner
         address questioner_;
         if (msg.sender == _owner) {
@@ -268,33 +271,41 @@ contract AskMiFunctions {
         require(exchanges.length > 0, "ERR12");
 
         // Check that the question exists
-        require(exchangeIndex < exchanges.length, "ERR13");
+        require(index < exchanges.length, "ERR13");
 
         // Check that the question has not been answered
         // An empty string is the default value for a string
         require(
-            keccak256(bytes(exchanges[exchangeIndex].answer.digest)) ==
+            keccak256(bytes(exchanges[index].answer.digest)) ==
                 keccak256(bytes("")),
             "14"
         );
 
-        // Create a refund variable to return the money deposited
-        uint256 refund = exchanges[exchangeIndex].balance;
+        // Create payment variables
+        uint256 balance = exchanges[index].balance;
 
-        address token = exchanges[exchangeIndex].token;
+        uint256 removalFee = (balance) / _fees.removal;
+        uint256 refund = balance - removalFee;
+
+        address token = exchanges[index].token;
 
         if (token == address(0)) {
+            // Pay removal fee
+            (bool feeSuccess, ) = _owner.call{value: removalFee}("");
+            require(feeSuccess, "15");
             // Issue refund
-            (bool success, ) = questioner.call{value: refund}("");
-            require(success, "15");
+            (bool refundSuccess, ) = questioner.call{value: refund}("");
+            require(refundSuccess, "15");
         } else {
-            // Check that the ERC20 exists in the lookup table
+            // Check that the ERC20 is supported
             require(_tiers[token].length != 0, "ERR10");
 
-            IERC20 _token = IERC20(token);
-            // Deposit tokens
-            // Pay the questioner
-            require(_token.transfer(questioner, refund), "ERR11");
+            IERC20 erc20 = IERC20(token);
+
+            // Pay removal fee
+            require(erc20.transfer(_owner, removalFee), "ERR11");
+            // Issue refund
+            require(erc20.transfer(questioner, refund), "ERR11");
         }
 
         if (exchanges.length == 1) {
@@ -344,19 +355,18 @@ contract AskMiFunctions {
             // 0x123 -> 1
 
             // Remove the last element
-            // TODO: Check if the delete keyword should be used here
             exchanges.pop();
         } else {
-            // Delete question and shrink array
+            // Delete an element and shrink array
 
             // Get the last element of the array
             Exchange memory lastExchange = exchanges[exchanges.length - 1];
 
-            // Change its exchangeIndex value to match new index
-            lastExchange.exchangeIndex = exchangeIndex;
+            // Change its index value to match new index
+            lastExchange.index = index;
 
             // Use the last element to overwrite the element to be deleted
-            exchanges[exchangeIndex] = lastExchange;
+            exchanges[index] = lastExchange;
 
             // Remove the last element/duplicate
             exchanges.pop();
@@ -368,28 +378,28 @@ contract AskMiFunctions {
     // @param digest The digest output of hash function in hex with prepended '0x'
     // @param hashFunction The hash function code for the function used
     // @param size The length of digest
-    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
+    // @param index Index of the selected exchange in the questioners' exchanges array
     function respond(
         address questioner,
         string memory digest,
         uint256 hashFunction,
         uint256 size,
-        uint256 exchangeIndex
+        uint256 index
     ) external noReentrant onlyOwner {
         // Get all the exchanges from a questioner
         Exchange[] storage exchanges = _exchanges[questioner];
 
         // Check that the exchange exists
-        require(exchangeIndex < exchanges.length, "ERR16");
+        require(index < exchanges.length, "ERR16");
 
         // Get the balance of the selected exchange
-        uint256 balance = exchanges[exchangeIndex].balance;
+        uint256 balance = exchanges[index].balance;
 
         // Create payment variables
-        uint256 devFee = (balance) / _fee;
+        uint256 devFee = (balance) / _fees.developer;
         uint256 payment = balance - devFee;
 
-        address token = exchanges[exchangeIndex].token;
+        address token = exchanges[index].token;
 
         if (token == address(0)) {
             // Pay the owner of the contract (The Responder)
@@ -416,13 +426,13 @@ contract AskMiFunctions {
         });
 
         // Get the selected exchange
-        Exchange memory exchange = exchanges[exchangeIndex];
+        Exchange memory exchange = exchanges[index];
 
         // Update the selected exchange
         exchange.answer = answer;
         exchange.balance = 0;
 
-        exchanges[exchangeIndex] = exchange;
+        exchanges[index] = exchange;
     }
 
     // @notice Update the tip amount and the supported token for tipping
@@ -434,8 +444,8 @@ contract AskMiFunctions {
 
     // @notice Tip an exchange to highlight helpful content
     // @param questioner The questioner's address
-    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
-    function issueTip(address questioner, uint256 exchangeIndex)
+    // @param index Index of the selected exchange in the questioners' exchanges array
+    function issueTip(address questioner, uint256 index)
         external
         payable
         notOwner
@@ -446,11 +456,11 @@ contract AskMiFunctions {
         Exchange[] storage exchanges = _exchanges[questioner];
 
         // Check that the exchange exists
-        require(exchangeIndex < exchanges.length, "ERR16");
+        require(index < exchanges.length, "ERR16");
 
         // Pay the owner of the contract (The Responder)
         // TODO: Split the tip among the responder, the questioner and the dev
-        address token = exchanges[exchangeIndex].token;
+        address token = exchanges[index].token;
         uint256 tip = _tip.tip;
 
         if (_tip.token == address(0)) {
@@ -464,12 +474,12 @@ contract AskMiFunctions {
         }
 
         // Get the selected exchange
-        Exchange memory exchange = exchanges[exchangeIndex];
+        Exchange memory exchange = exchanges[index];
 
         // Increment the tip count
-        exchange.tips = exchanges[exchangeIndex].tips + 1;
+        exchange.tips = exchanges[index].tips + 1;
 
         // Update the selected exchange
-        exchanges[exchangeIndex] = exchange;
+        exchanges[index] = exchange;
     }
 }

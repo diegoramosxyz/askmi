@@ -45,7 +45,8 @@ describe('AskMiUltimate', () => {
 
     askmi = await askmiFactory.deploy(
       accounts[1].address, //dev
-      accounts[0].address //owner
+      accounts[0].address, //owner
+      100 // (balance/100 = 1%)
     )
 
     // Approve ERC20 spending
@@ -55,12 +56,13 @@ describe('AskMiUltimate', () => {
   })
 
   it('has all correct initial values', async () => {
-    let fee = await askmi._fee()
+    let fees = await askmi._fees()
     let questioners = await askmi.questioners()
     let tiers = await askmi.getTiers(constants.AddressZero)
     let owner = await askmi._owner()
 
-    expect(fee).eq('200')
+    expect(fees.developer).eq('200')
+    expect(fees.removal).eq('100')
     expect(tiers.length).eq(0)
     expect(questioners[0]).eq(constants.AddressZero)
     expect(owner).eq(accounts[0].address)

@@ -8,9 +8,12 @@ import "./askmi-functions.sol";
 // @author Diego Ramos
 // @notice This contract is unadited
 // @dev Any mention of ERC20 tokens implies that the zero address (0x0) is used to represent ether (ETH), as if ether was an ERC20 token with address 0x0.
-// @custom:roles responder: Owner of an askmi instance and the only person allowed to answer questions and change the contracts' settings. questioner: Anyone with an EOA who decides to ask a question. exchange: The exchange between the questioner asking as question and the responder answering it
+// @custom:roles responder: Owner of an askmi instance and the only person allowed to answer questions and change the contracts' settings. questioner: Anyone with an EOA who decides to ask a question.
+// Error codes:
+// ERR1: Removal fee must be greater than 0
 contract AskMi {
     /* ---------- VARIABLES ---------- */
+
     // @notice The owner of this smart contract (askmi instance)
     address public _owner;
 
@@ -26,8 +29,8 @@ contract AskMi {
     // @dev Address designated to receive all dev fees
     address private _developer;
 
-    // @notice The dev fee percentage (balance/200 = 0.5%)
-    uint256 public _fee = 200;
+    // @notice The dev fee percentage
+    Fees public _fees;
 
     // @notice An array of all unique addresses which have asked a question
     address[] private _questioners;
@@ -49,25 +52,42 @@ contract AskMi {
 
     /* ---------- STRUCTS ---------- */
 
-    // The multihash representation of an IPFS' CID
+    // @dev The multihash representation of an IPFS' CID
+    // @custom:struct digest The digest output of hash function in hex with prepended '0x'
+    // @custom:struct hashFunction The hash function code for the function used
+    // @custom:struct size The length of digest
     struct Cid {
         string digest;
         uint256 hashFunction;
         uint256 size;
     }
 
+    // @custom:struct token Address for the token used to pay to tip
+    // @custom:struct tip Amount required to tip
     struct Tip {
         address token;
         uint256 tip;
     }
 
+    // @custom:struct removal Fee paid to the responder for deleting a question. If the responder removes the question it's justified because he has to pay gas fees. If the questioner removes it, it's justified because the responder may have started working on an answer.
+    // @custom:struct developer Fee paid to the developer of the project
+    struct Fees {
+        uint256 removal;
+        uint256 developer;
+    }
+
+    // @dev exchange The exchange between the questioner asking as question and the responder answering it
+    // @custom:struct question The CID containing the question
+    // @custom:struct answer The CID containing the answer
+    // @custom:struct token Address for the token used to pay to ask
+    // @custom:struct index Index of the current exchange in the exchanges array
+    // @custom:struct balance Amount paid to ask
+    // @custom:struct tips Amount of times an answer has been tipped
     struct Exchange {
         Cid question;
         Cid answer;
         address token;
-        uint256 exchangeIndex;
-        // The balance in wei paid to the owner for a response
-        // This will vary depending on the price tiers
+        uint256 index;
         uint256 balance;
         uint256 tips;
     }
@@ -76,9 +96,17 @@ contract AskMi {
 
     // @param developer The developer's address
     // @param owner This contract's owner
-    constructor(address developer, address owner) {
+    // @param removalFee The fee taken from the questioner to remove a question
+    constructor(
+        address developer,
+        address owner,
+        uint256 removalFee
+    ) {
+        require(removalFee > 0, "ERR1");
         _developer = developer;
         _owner = owner;
+        _fees.developer = 200; // (balance/200 = 0.5%)
+        _fees.removal = removalFee; // (balance/100 = 1%)
 
         // Occupy the first index of the questioners
         // array to allow for array lookups
@@ -87,7 +115,9 @@ contract AskMi {
 
     /* ---------- EVENTS ---------- */
 
-    event QuestionAnswered(address questioner, uint256 exchangeIndex);
+    // @param questioner The person who asked the question
+    // @param index The index of the question in the exchanges array
+    event QuestionAnswered(address questioner, uint256 index);
 
     /* ---------- GETTER FUNCTIONS ---------- */
 
@@ -173,14 +203,14 @@ contract AskMi {
     // @param digest The digest output of hash function in hex with prepended '0x'
     // @param hashFunction The hash function code for the function used
     // @param size The length of digest
-    // @param tierIndex The index of the selected tier in the _tiers array
+    // @param index The index of the selected tier in the _tiers array
     function ask(
         address functionsContract,
         address token,
         string memory digest,
         uint256 hashFunction,
         uint256 size,
-        uint256 tierIndex
+        uint256 index
     ) external payable {
         (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
@@ -189,7 +219,7 @@ contract AskMi {
                 digest,
                 hashFunction,
                 size,
-                tierIndex
+                index
             )
         );
         require(success, "ask() failed");
@@ -198,17 +228,17 @@ contract AskMi {
     // @notice The questioner or the responder can remove a question and a refund is issued
     // @param functionsContract Contract with functions to modify state in this contract
     // @param questioner The questioner's address
-    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
+    // @param index Index of the selected exchange in the questioners' exchanges array
     function remove(
         address functionsContract,
         address questioner,
-        uint256 exchangeIndex
+        uint256 index
     ) external {
         (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "remove(address,uint256)",
                 questioner,
-                exchangeIndex
+                index
             )
         );
         require(success, "remove() failed");
@@ -220,14 +250,14 @@ contract AskMi {
     // @param digest The digest output of hash function in hex with prepended '0x'
     // @param hashFunction The hash function code for the function used
     // @param size The length of digest
-    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
+    // @param index Index of the selected exchange in the questioners' exchanges array
     function respond(
         address functionsContract,
         address questioner,
         string memory digest,
         uint256 hashFunction,
         uint256 size,
-        uint256 exchangeIndex
+        uint256 index
     ) external {
         (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
@@ -236,28 +266,28 @@ contract AskMi {
                 digest,
                 hashFunction,
                 size,
-                exchangeIndex
+                index
             )
         );
         require(success, "respond() failed");
 
-        emit QuestionAnswered(questioner, exchangeIndex);
+        emit QuestionAnswered(questioner, index);
     }
 
     // @notice Tip an exchange to highlight helpful content
     // @param functionsContract Contract with functions to modify state in this contract
     // @param questioner The questioner's address
-    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
+    // @param index Index of the selected exchange in the questioners' exchanges array
     function issueTip(
         address functionsContract,
         address questioner,
-        uint256 exchangeIndex
+        uint256 index
     ) external payable {
         (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "issueTip(address,uint256)",
                 questioner,
-                exchangeIndex
+                index
             )
         );
         require(success, "issueTip() failed");
