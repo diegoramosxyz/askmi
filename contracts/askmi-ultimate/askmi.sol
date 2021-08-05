@@ -9,8 +9,6 @@ import "./askmi-functions.sol";
 // @notice This contract is unadited
 // @dev Any mention of ERC20 tokens implies that the zero address (0x0) is used to represent ether (ETH), as if ether was an ERC20 token with address 0x0.
 // @custom:roles responder: Owner of an askmi instance and the only person allowed to answer questions and change the contracts' settings. questioner: Anyone with an EOA who decides to ask a question.
-// Error codes:
-// ERR1: Removal fee must be greater than 0
 contract AskMi {
     /* ---------- VARIABLES ---------- */
 
@@ -24,7 +22,7 @@ contract AskMi {
     bool public _disabled;
 
     // @notice The tip cost and token address for all exchanges
-    Tip private _tip;
+    Tip public _tip;
 
     // @dev Address designated to receive all dev fees
     address private _developer;
@@ -94,19 +92,48 @@ contract AskMi {
 
     /* ---------- CONSTRUCTOR ---------- */
 
+    // @param functionsContract Contract with functions to modify state in this contract
     // @param developer The developer's address
     // @param owner This contract's owner
+    // @param tiersToken Any ERC20 token or 0x0 for ETH
+    // @param tipToken Any ERC20 token or 0x0 for ETH
+    // @param tiers The tiers for the selected token
+    // @param tip The cost for people to tip
     // @param removalFee The fee taken from the questioner to remove a question
     constructor(
+        address functionsContract,
         address developer,
         address owner,
+        address tiersToken,
+        address tipToken,
+        uint256[] memory tiers,
+        uint256 tip,
         uint256 removalFee
     ) {
-        require(removalFee > 0, "ERR1");
         _developer = developer;
         _owner = owner;
         _fees.developer = 200; // (balance/200 = 0.5%)
-        _fees.removal = removalFee; // (balance/100 = 1%)
+
+        (bool removalSuccess, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateRemovalFee(uint256)", removalFee)
+        );
+
+        require(removalSuccess, "updateRemovalFee() failed");
+
+        (bool tiersSuccess, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "updateTiers(address,uint256[])",
+                tiersToken,
+                tiers
+            )
+        );
+        require(tiersSuccess, "updateTiers() failed");
+
+        (bool tipSuccess, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateTip(uint256,address)", tip, tipToken)
+        );
+
+        require(tipSuccess, "updateTip() failed");
 
         // Occupy the first index of the questioners
         // array to allow for array lookups
@@ -124,11 +151,6 @@ contract AskMi {
     // @return The complete array of supported tokens
     function supportedTokens() external view returns (address[] memory) {
         return _supportedTokens;
-    }
-
-    // @return The tip cost and the token address
-    function tipAndToken() external view returns (uint256, address) {
-        return (_tip.tip, _tip.token);
     }
 
     // @param token Any ERC20 token address

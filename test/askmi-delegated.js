@@ -44,8 +44,13 @@ describe('AskMiUltimate', () => {
     )
 
     askmi = await askmiFactory.deploy(
+      functionsAddress,
       accounts[1].address, //dev
       accounts[0].address, //owner
+      constants.AddressZero,
+      constants.AddressZero,
+      [parseEth('0.1'), parseEth('10.0')],
+      parseEth('0.1'),
       100 // (balance/100 = 1%)
     )
 
@@ -57,59 +62,22 @@ describe('AskMiUltimate', () => {
 
   it('has all correct initial values', async () => {
     let fees = await askmi._fees()
+    let tip = await askmi._tip()
     let questioners = await askmi.questioners()
     let tiers = await askmi.getTiers(constants.AddressZero)
     let owner = await askmi._owner()
 
     expect(fees.developer).eq('200')
     expect(fees.removal).eq('100')
-    expect(tiers.length).eq(0)
+    expect(tiers.length).eq(2)
     expect(questioners[0]).eq(constants.AddressZero)
+    expect(tip[0]).eq(constants.AddressZero)
     expect(owner).eq(accounts[0].address)
   })
 
   it('supportedTokens() returns no tokens', async () => {
     let supportedTokens = await askmi.supportedTokens()
-    expect(supportedTokens.length).eq(0)
-  })
-
-  it('ask() fails because ETH is not supported', async () => {
-    await expect(
-      askmi
-        .connect(accounts[1])
-        .ask(
-          functionsAddress,
-          constants.AddressZero,
-          '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
-          '0x12',
-          '0x20',
-          1,
-          { value: utils.parseEther('0') }
-        )
-    ).to.be.rejected
-
-    questions = await askmi.questions(accounts[1].address)
-
-    expect(questions.length).eq(0)
-  })
-
-  it('ask() fails because ERC20 is not supported', async () => {
-    await expect(
-      askmi
-        .connect(accounts[1])
-        .ask(
-          functionsAddress,
-          daiAddress,
-          '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
-          '0x12',
-          '0x20',
-          1
-        )
-    ).to.be.rejected
-
-    questions = await askmi.questions(accounts[1].address)
-
-    expect(questions.length).eq(0)
+    expect(supportedTokens.length).eq(1)
   })
 
   it('updateTiers() adds support for ETH', async () => {
@@ -270,10 +238,10 @@ describe('AskMiUltimate', () => {
       constants.AddressZero
     )
 
-    let tip = await askmi.tipAndToken()
+    let tip = await askmi._tip()
 
-    expect(tip[0].toString()).eq(parseEth('0.1'))
-    expect(tip[1]).eq(constants.AddressZero)
+    expect(tip[0]).eq(constants.AddressZero)
+    expect(tip[1].toString()).eq(parseEth('0.1'))
   })
 
   it('issueTip() works for ETH', async () => {
@@ -291,10 +259,10 @@ describe('AskMiUltimate', () => {
   it('updateTip() works for ERC20', async () => {
     await askmi.updateTip(functionsAddress, parseEth('0.1'), daiAddress)
 
-    let tip = await askmi.tipAndToken()
+    let tip = await askmi._tip()
 
-    expect(tip[0].toString()).eq(parseEth('0.1'))
-    expect(tip[1]).eq(daiAddress)
+    expect(tip[0]).eq(daiAddress)
+    expect(tip[1].toString()).eq(parseEth('0.1'))
   })
 
   it('issueTip() works for ERC20', async () => {
@@ -318,6 +286,28 @@ describe('AskMiUltimate', () => {
     expect(supportedTokens.length).eq(1)
   })
 
+  it('ask() fails because ETH is not supported', async () => {
+    let qs = await askmi.questions(accounts[1].address)
+
+    await expect(
+      askmi
+        .connect(accounts[1])
+        .ask(
+          functionsAddress,
+          constants.AddressZero,
+          '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
+          '0x12',
+          '0x20',
+          0,
+          { value: utils.parseEther('0.01') }
+        )
+    ).to.be.rejected
+
+    questions = await askmi.questions(accounts[1].address)
+
+    expect(questions.length).eq(qs.length)
+  })
+
   it('updateTiers() drops support for ERC20', async () => {
     await askmi.updateTiers(functionsAddress, daiAddress, [])
 
@@ -328,6 +318,27 @@ describe('AskMiUltimate', () => {
     let supportedTokens = await askmi.supportedTokens()
 
     expect(supportedTokens.length).eq(0)
+  })
+
+  it('ask() fails because ERC20 is not supported', async () => {
+    let qs = await askmi.questions(accounts[1].address)
+
+    await expect(
+      askmi
+        .connect(accounts[1])
+        .ask(
+          functionsAddress,
+          daiAddress,
+          '0x744d7ad0f5893404994e4bfc6af6fb365439d15d7338b7f8ff1b39c5f3593fad',
+          '0x12',
+          '0x20',
+          1
+        )
+    ).to.be.rejected
+
+    questions = await askmi.questions(accounts[1].address)
+
+    expect(questions.length).eq(qs.length)
   })
 
   it('toggleDisabled() works', async () => {

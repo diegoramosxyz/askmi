@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // expertise, social media and others
 
 // ERRORS CODES
+// ERR1: Removal fee must be greater than 0
 // ERR2: Attempted to add a tier of cost 0
 // ERR3: Must be owner to call function
 // ERR4: Must not be owner to call function
@@ -42,7 +43,7 @@ contract AskMiFunctions {
     bool public _disabled;
 
     // @notice The tip cost and token address for all exchanges
-    Tip private _tip;
+    Tip public _tip;
 
     // @dev Address designated to receive all dev fees
     address private _developer;
@@ -186,6 +187,11 @@ contract AskMiFunctions {
             // Add or update support for a token
             _tiers[token] = tiers;
         }
+    }
+
+    function updateRemovalFee(uint256 removalFee) external onlyOwner {
+        require(removalFee > 0, "ERR1");
+        _fees.removal = removalFee; // (balance/100 = 1%)
     }
 
     /* ---------- HELPER FUNCTIONS ---------- */
