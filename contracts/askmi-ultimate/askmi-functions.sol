@@ -3,20 +3,6 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-// import "./lib.sol";
-
-// TODO:
-// - Add an upper bound for tiers. Like 10 max
-// - Make the answers updatable
-// - Maybe allow the responder to write an "AD" about his
-// expertise, social media and others.
-// - Set a min. value to charge per question
-
-// RESPONDER: The owner of the contract.
-// QUESTIONER: Anyone who asks a question.
-// EXCHANGE: The exchange between the questioner asking
-// as question and the responder answering
-
 // ERRORS CODES
 // ERR1: Tiers amount exceeds the maximum of 9.
 // ERR2: Attempted to add a tier of cost 0.
@@ -37,7 +23,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // ERR16: Exchange does not exist
 // ERR17: The tip amount is incorrect.
 
-// @title A question-and-answer smart contract
+// @title Functions used to update the state of an AskMi instance
 // @author Diego Ramos
 contract AskMiFunctions {
     /* ---------- VARIABLES ---------- */
@@ -102,13 +88,6 @@ contract AskMiFunctions {
         uint256 tips;
     }
 
-    // Make the smart contract payable
-    // receive() external payable {}
-
-    /* ---------- EVENTS ---------- */
-
-    event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
-
     /* ---------- MODIFIERS ---------- */
 
     modifier onlyOwner() {
@@ -128,7 +107,7 @@ contract AskMiFunctions {
         locked = false;
     }
 
-    function toggleDisabled() external {
+    function toggleDisabled() external onlyOwner {
         disabled = !disabled;
     }
 
@@ -443,8 +422,6 @@ contract AskMiFunctions {
         _exchange.balance = 0;
 
         _exchanges[_exchangeIndex] = _exchange;
-
-        emit QuestionAnswered(_questioner, _exchangeIndex);
     }
 
     function updateTip(uint256 _tip, address _token) external {
@@ -488,7 +465,5 @@ contract AskMiFunctions {
 
         // Update the selected exchange
         _exchanges[_exchangeIndex] = _exchange;
-
-        // emit TipIssued(msg.sender, _questioner, _exchangeIndex);
     }
 }

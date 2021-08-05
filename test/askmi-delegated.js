@@ -196,7 +196,7 @@ describe('AskMiUltimate', () => {
     expect(questions.length).eq(0)
   })
 
-  it('respond() works with ETH', async () => {
+  it('respond() works with ETH and event is emitted', async () => {
     await askmi
       .connect(accounts[1])
       .ask(
@@ -209,7 +209,7 @@ describe('AskMiUltimate', () => {
         { value: utils.parseEther('1.0') }
       )
 
-    await askmi
+    let { wait } = await askmi
       .connect(accounts[0])
       .respond(
         functionsAddress,
@@ -220,12 +220,16 @@ describe('AskMiUltimate', () => {
         0
       )
 
+    let { events } = await wait()
+
+    expect(events[0]['event']).eq('QuestionAnswered')
+
     let questions = await askmi.getQuestions(accounts[1].address)
 
     expect(questions.length).eq(1)
   })
 
-  it('respond() works with ERC20', async () => {
+  it('respond() works with ERC20 and event is emitted', async () => {
     await askmi
       .connect(accounts[1])
       .ask(
@@ -237,7 +241,7 @@ describe('AskMiUltimate', () => {
         1
       )
 
-    await askmi
+    let { wait } = await askmi
       .connect(accounts[0])
       .respond(
         functionsAddress,
@@ -247,6 +251,10 @@ describe('AskMiUltimate', () => {
         '0x20',
         1
       )
+
+    let { events } = await wait()
+
+    expect(events[2]['event']).eq('QuestionAnswered')
 
     let questions = await askmi.getQuestions(accounts[1].address)
 

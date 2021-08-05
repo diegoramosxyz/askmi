@@ -83,9 +83,6 @@ contract AskMi {
 
     // @param _dev The developer's address
     // @param _owner This contract's owner
-    // @param _tiers The prices to ask a question
-    // @param _tip The cost to tip an exchange
-    // @param _token Address of the first supported token (0x0 for ETH)
     constructor(address _dev, address _owner) {
         dev = _dev;
         owner = _owner;
@@ -95,12 +92,9 @@ contract AskMi {
         questioners.push(address(0));
     }
 
-    // Make the smart contract payable
-    // receive() external payable {}
-
     /* ---------- EVENTS ---------- */
 
-    // event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
+    event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
 
     /* ---------- GETTER FUNCTIONS ---------- */
 
@@ -138,6 +132,7 @@ contract AskMi {
 
     /* ---------- UPDATE FUNCTIONS ---------- */
 
+    // @notice Disable or enable the ask() function
     function toggleDisabled(address _functionsContract) external {
         (bool success, ) = _functionsContract.delegatecall(
             abi.encodeWithSignature("toggleDisabled()")
@@ -145,7 +140,11 @@ contract AskMi {
         require(success, "toggleDisabled() failed");
     }
 
-    // @notice Update the tip and tiers array
+    // @notice Update the tiers array for ETH or an ERC20 token
+    // If the new tiers array is empty, support for the selected
+    // array will be dropped.
+    // If the token was no supported and new tiers are added,
+    // support for the token will be enabled
     function updateTiers(
         address _functionsContract,
         address _tokenAddress,
@@ -247,7 +246,7 @@ contract AskMi {
         );
         require(success, "respond() failed");
 
-        // emit QuestionAnswered(_questioner, _exchangeIndex);
+        emit QuestionAnswered(_questioner, _exchangeIndex);
     }
 
     // @notice Tip an exchange to highlight helpful content
