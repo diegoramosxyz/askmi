@@ -49,7 +49,7 @@ contract AskMiFunctions {
     // @dev Address designated to receive all dev fees
     address private _developer;
 
-    // @notice The dev fee percentage
+    // @notice The developer fee and removal fee
     Fees public _fees;
 
     // @notice An array of all unique addresses which have asked a question
@@ -72,23 +72,37 @@ contract AskMiFunctions {
 
     /* ---------- STRUCTS ---------- */
 
-    // The multihash representation of an IPFS' CID
+    // @dev The multihash representation of an IPFS' CID
+    // @custom:struct digest The digest output of hash function in hex with prepended '0x'
+    // @custom:struct hashFunction The hash function code for the function used
+    // @custom:struct size The length of digest
     struct Cid {
         string digest;
         uint256 hashFunction;
         uint256 size;
     }
 
+    // @custom:struct token Address for the token used to pay to tip
+    // @custom:struct tip Amount required to tip
     struct Tip {
         address token;
         uint256 tip;
     }
 
+    // @custom:struct removal Fee paid to the responder for deleting a question. If the responder removes the question it's justified because he has to pay gas fees. If the questioner removes it, it's justified because the responder may have started working on an answer.
+    // @custom:struct developer Fee paid to the developer of the project
     struct Fees {
         uint256 removal;
         uint256 developer;
     }
 
+    // @dev exchange The exchange between the questioner asking as question and the responder answering it
+    // @custom:struct question The CID containing the question
+    // @custom:struct answer The CID containing the answer
+    // @custom:struct token Address for the token used to pay to ask
+    // @custom:struct index Index of the current exchange in the exchanges array
+    // @custom:struct balance Amount paid to ask
+    // @custom:struct tips Amount of times an answer has been tipped
     struct Exchange {
         Cid question;
         Cid answer;

@@ -29,7 +29,7 @@ contract AskMi {
     // @dev Address designated to receive all dev fees
     address private _developer;
 
-    // @notice The dev fee percentage
+    // @notice The developer fee and removal fee
     Fees public _fees;
 
     // @notice An array of all unique addresses which have asked a question
