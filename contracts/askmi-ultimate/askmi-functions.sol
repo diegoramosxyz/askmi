@@ -9,14 +9,11 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // expertise, social media and others
 
 // ERRORS CODES
-// ERR1: Tiers amount exceeds the maximum of 9
 // ERR2: Attempted to add a tier of cost 0
 // ERR3: Must be owner to call function
 // ERR4: Must not be owner to call function
 // ERR5: Re-entrancy not allowed
 // ERR6: Attempted to update tiers but did not include
-// ERRa tip price and at least on tier price
-// ERR7: The tiers index start at index 1
 // ERR8: The selected tier does not exist
 // ERR9: The deposit is not equal to the tier price
 // ERR10: This token is not supported
@@ -28,6 +25,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // ERR16: Exchange does not exist
 // ERR17: The tip amount is incorrect
 // ERR18: Cannot ask questions because the ask() function has been disabled
+// ERR19: Tips are disabled
 
 // @title Functions used to update the state of an AskMi instance
 // @author Diego Ramos
@@ -180,9 +178,9 @@ contract AskMiFunctions {
                 _supportedTokensIndex[token] = _supportedTokens.length;
                 _supportedTokens.push(token);
             }
-            require(length > 0 && length < 10, "6");
+            require(length > 0 && length < 10, "ERR6");
             for (uint256 i = 0; i < length; i++) {
-                require(tiers[i] > 0, "2");
+                require(tiers[i] > 0, "ERR2");
             }
 
             // Add or update support for a token
@@ -220,7 +218,7 @@ contract AskMiFunctions {
         uint256 size,
         uint256 index
     ) external payable notOwner {
-        require(!_disabled, "");
+        require(!_disabled, "ERR18");
 
         uint256[] memory tiers = _tiers[token];
 
@@ -292,7 +290,7 @@ contract AskMiFunctions {
         require(
             keccak256(bytes(exchanges[index].answer.digest)) ==
                 keccak256(bytes("")),
-            "14"
+            "ERR14"
         );
 
         // Create payment variables
@@ -306,10 +304,10 @@ contract AskMiFunctions {
         if (token == address(0)) {
             // Pay removal fee
             (bool feeSuccess, ) = _owner.call{value: removalFee}("");
-            require(feeSuccess, "15");
+            require(feeSuccess, "ERR15");
             // Issue refund
             (bool refundSuccess, ) = questioner.call{value: refund}("");
-            require(refundSuccess, "15");
+            require(refundSuccess, "ERR15");
         } else {
             // Check that the ERC20 is supported
             require(_tiers[token].length != 0, "ERR10");
@@ -465,7 +463,7 @@ contract AskMiFunctions {
         notOwner
     {
         // Check that tips aren't disabled
-        require(_tip.tip > 0, "");
+        require(_tip.tip > 0, "ERR19");
         // Get all the exchanges from a questioner
         Exchange[] storage exchanges = _exchanges[questioner];
 
