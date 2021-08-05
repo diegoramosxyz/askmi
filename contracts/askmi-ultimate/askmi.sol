@@ -4,55 +4,48 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./askmi-functions.sol";
 
-// TODO:
-// - Make the answers updatable
-// - Maybe allow the responder to write an "AD" about his
-// expertise, social media and others
-
-// RESPONDER: The owner of the contract.
-// QUESTIONER: Anyone who asks a question.
-// EXCHANGE: The exchange between the questioner asking
-// as question and the responder answering
-
 // @title A question-and-answer smart contract
 // @author Diego Ramos
+// @notice This contract is unadited
+// @dev Any mention of ERC20 tokens implies that the zero address (0x0) is used to represent ether (ETH), as if ether was an ERC20 token with address 0x0.
+// @custom:roles responder: Owner of an askmi instance and the only person allowed to answer questions and change the contracts' settings. questioner: Anyone with an EOA who decides to ask a question. exchange: The exchange between the questioner asking as question and the responder answering it
 contract AskMi {
     /* ---------- VARIABLES ---------- */
     // @notice The owner of this smart contract (askmi instance)
-    address public owner;
+    address public _owner;
 
     // @dev Variable used to prevent re-entrancy
-    bool private locked;
+    bool private _locked;
 
     // @notice Prevents the ask() function from being called
-    bool public disabled;
+    bool public _disabled;
 
     // @notice The tip cost and token address for all exchanges
-    Tip private tip;
+    Tip private _tip;
 
     // @dev Address designated to receive all dev fees
-    address private dev;
+    address private _developer;
 
     // @notice The dev fee percentage (balance/200 = 0.5%)
-    uint256 public fee = 200;
+    uint256 public _fee = 200;
 
     // @notice An array of all unique addresses which have asked a question
-    address[] private questioners;
+    address[] private _questioners;
 
     // @notice Mapping pointing to the possition of a questioner in the questioners array
-    mapping(address => uint256) private questionersIndex;
+    mapping(address => uint256) private _questionersIndex;
 
     // @notice The list of questions from a questioner
-    mapping(address => Exchange[]) private exchanges;
+    mapping(address => Exchange[]) private _exchanges;
 
-    // @notice List of token addresses (0x0 for ETH) accepted as payment by the responder
-    address[] private supportedTokens;
+    // @notice List of token addresses accepted as payment by the responder
+    address[] private _supportedTokens;
 
     // @dev Mapping pointing to the possition of supported tokens in the supportedTokens array
-    mapping(address => uint256) private supportedTokensIndex;
+    mapping(address => uint256) private _supportedTokensIndex;
 
-    // @dev The tiers for each supported token (0x0 for ETH)
-    mapping(address => uint256[]) private tiers;
+    // @dev The tiers for each supported token
+    mapping(address => uint256[]) private _tiers;
 
     /* ---------- STRUCTS ---------- */
 
@@ -71,7 +64,7 @@ contract AskMi {
     struct Exchange {
         Cid question;
         Cid answer;
-        address tokenAddress;
+        address token;
         uint256 exchangeIndex;
         // The balance in wei paid to the owner for a response
         // This will vary depending on the price tiers
@@ -81,185 +74,190 @@ contract AskMi {
 
     /* ---------- CONSTRUCTOR ---------- */
 
-    // @param _dev The developer's address
-    // @param _owner This contract's owner
-    constructor(address _dev, address _owner) {
-        dev = _dev;
-        owner = _owner;
+    // @param developer The developer's address
+    // @param owner This contract's owner
+    constructor(address developer, address owner) {
+        _developer = developer;
+        _owner = owner;
 
         // Occupy the first index of the questioners
         // array to allow for array lookups
-        questioners.push(address(0));
+        _questioners.push(address(0));
     }
 
     /* ---------- EVENTS ---------- */
 
-    event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
+    event QuestionAnswered(address questioner, uint256 exchangeIndex);
 
     /* ---------- GETTER FUNCTIONS ---------- */
 
-    // @notice Get the complete tiers array
+    // @return The complete array of supported tokens
     function getSupportedTokens() external view returns (address[] memory) {
-        return supportedTokens;
+        return _supportedTokens;
     }
 
+    // @return The tip cost and the token address
     function getTip() external view returns (uint256, address) {
-        return (tip.tip, tip.token);
+        return (_tip.tip, _tip.token);
     }
 
-    // @notice Get the complete tiers array
-    function getTiers(address _tokenAddress)
-        external
-        view
-        returns (uint256[] memory)
-    {
-        return tiers[_tokenAddress];
+    // @param token Any ERC20 token address
+    // @return The tiers corresponding to the input address
+    function getTiers(address token) external view returns (uint256[] memory) {
+        return _tiers[token];
     }
 
-    // @notice Get the complete questioners array.
+    // @return The complete set of questioners as an array
     function getQuestioners() external view returns (address[] memory) {
-        return questioners;
+        return _questioners;
     }
 
-    // @notice Get all of the questions asked by one questioner
-    function getQuestions(address _questioner)
+    // @param questioner Address of one questioner from the questioners set
+    // @return The complete array of exchanges started by a questioner
+    function getQuestions(address questioner)
         external
         view
         returns (Exchange[] memory)
     {
-        return exchanges[_questioner];
+        return _exchanges[questioner];
     }
 
     /* ---------- UPDATE FUNCTIONS ---------- */
 
     // @notice Disable or enable the ask() function
-    function toggleDisabled(address _functionsContract) external {
-        (bool success, ) = _functionsContract.delegatecall(
+    function toggleDisabled(address functionsContract) external {
+        (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature("toggleDisabled()")
         );
         require(success, "toggleDisabled() failed");
     }
 
-    // @notice Update the tiers array for ETH or an ERC20 token
-    // If the new tiers array is empty, support for the selected
-    // array will be dropped.
-    // If the token was no supported and new tiers are added,
-    // support for the token will be enabled
+    // @notice Update the tiers for any token. If the new tiers array is empty, support for the selected token will be dropped. If the token was no supported and new tiers are added, support for the token will be enabled
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param token Any ERC20 token
+    // @param tiers The tiers for the selected token
     function updateTiers(
-        address _functionsContract,
-        address _tokenAddress,
-        uint256[] memory _newTiers
+        address functionsContract,
+        address token,
+        uint256[] memory tiers
     ) external {
-        (bool success, ) = _functionsContract.delegatecall(
+        (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "updateTiers(address,uint256[])",
-                _tokenAddress,
-                _newTiers
+                token,
+                tiers
             )
         );
         require(success, "updateTiers() failed");
     }
 
+    // @notice Update the tip amount and the supported token for tipping
+    // @param tip The cost for people to tip
+    // @param token Any ERC20 token
     function updateTip(
-        address _functionsContract,
-        uint256 _tip,
-        address _token
+        address functionsContract,
+        uint256 tip,
+        address token
     ) external {
-        (bool success, ) = _functionsContract.delegatecall(
-            abi.encodeWithSignature("updateTip(uint256,address)", _tip, _token)
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateTip(uint256,address)", tip, token)
         );
         require(success, "updateTip() failed");
     }
 
     /* ---------- PRIMARY FUNCTIONS ---------- */
 
-    // @notice Ask a question to the RESPONDER
-    // @param _tokenAddress Address of a supported token
-    // @param _digest The digest output of hash function in hex with prepended '0x'
-    // @param _hashFunction The hash function code for the function used
-    // @param _size The length of digest
-    // @param _tierIndex The index of the selected tier in the tiers array
+    // @notice Ask a question to the owner
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param token Address of a supported token
+    // @param digest The digest output of hash function in hex with prepended '0x'
+    // @param hashFunction The hash function code for the function used
+    // @param size The length of digest
+    // @param tierIndex The index of the selected tier in the _tiers array
     function ask(
-        address _functionsContract,
-        address _tokenAddress,
-        string memory _digest,
-        uint256 _hashFunction,
-        uint256 _size,
-        uint256 _tierIndex
+        address functionsContract,
+        address token,
+        string memory digest,
+        uint256 hashFunction,
+        uint256 size,
+        uint256 tierIndex
     ) external payable {
-        (bool success, ) = _functionsContract.delegatecall(
+        (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "ask(address,string,uint256,uint256,uint256)",
-                _tokenAddress,
-                _digest,
-                _hashFunction,
-                _size,
-                _tierIndex
+                token,
+                digest,
+                hashFunction,
+                size,
+                tierIndex
             )
         );
         require(success, "ask() failed");
     }
 
-    // @notice The questioner or the responder can remove a question and
-    // a refund is issued
-    // TODO: Maybe have the responder receive a fraction of the refund if the
-    // questioner removes the question
+    // @notice The questioner or the responder can remove a question and a refund is issued
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param questioner The questioner's address
+    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
     function remove(
-        address _functionsContract,
-        address _questioner,
-        uint256 _exchangeIndex
+        address functionsContract,
+        address questioner,
+        uint256 exchangeIndex
     ) external {
-        (bool success, ) = _functionsContract.delegatecall(
+        (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "remove(address,uint256)",
-                _questioner,
-                _exchangeIndex
+                questioner,
+                exchangeIndex
             )
         );
         require(success, "remove() failed");
     }
 
     // @notice The owner answers a question
-    // @param _questioner The address which asked the question
-    // @param _digest The digest output of hash function in hex with prepended '0x'
-    // @param _hashFunction The hash function code for the function used
-    // @param _size The length of digest
-    // @param _exchangeIndex The index of the selected exchange in the array of exchanges of
-    // the questioner
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param questioner The questioner's address
+    // @param digest The digest output of hash function in hex with prepended '0x'
+    // @param hashFunction The hash function code for the function used
+    // @param size The length of digest
+    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
     function respond(
-        address _functionsContract,
-        address _questioner,
-        string memory _digest,
-        uint256 _hashFunction,
-        uint256 _size,
-        uint256 _exchangeIndex
+        address functionsContract,
+        address questioner,
+        string memory digest,
+        uint256 hashFunction,
+        uint256 size,
+        uint256 exchangeIndex
     ) external {
-        (bool success, ) = _functionsContract.delegatecall(
+        (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "respond(address,string,uint256,uint256,uint256)",
-                _questioner,
-                _digest,
-                _hashFunction,
-                _size,
-                _exchangeIndex
+                questioner,
+                digest,
+                hashFunction,
+                size,
+                exchangeIndex
             )
         );
         require(success, "respond() failed");
 
-        emit QuestionAnswered(_questioner, _exchangeIndex);
+        emit QuestionAnswered(questioner, exchangeIndex);
     }
 
     // @notice Tip an exchange to highlight helpful content
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param questioner The questioner's address
+    // @param exchangeIndex Index of the selected exchange in the questioners' exchanges array
     function issueTip(
-        address _functionsContract,
-        address _questioner,
-        uint256 _exchangeIndex
+        address functionsContract,
+        address questioner,
+        uint256 exchangeIndex
     ) external payable {
-        (bool success, ) = _functionsContract.delegatecall(
+        (bool success, ) = functionsContract.delegatecall(
             abi.encodeWithSignature(
                 "issueTip(address,uint256)",
-                _questioner,
-                _exchangeIndex
+                questioner,
+                exchangeIndex
             )
         );
         require(success, "issueTip() failed");

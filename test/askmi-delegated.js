@@ -55,10 +55,10 @@ describe('AskMiUltimate', () => {
   })
 
   it('has all correct initial values', async () => {
-    let fee = await askmi.fee()
+    let fee = await askmi._fee()
     let questioners = await askmi.getQuestioners()
     let tiers = await askmi.getTiers(constants.AddressZero)
-    let owner = await askmi.owner()
+    let owner = await askmi._owner()
 
     expect(fee).eq('200')
     expect(tiers.length).eq(0)
