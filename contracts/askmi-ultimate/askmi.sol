@@ -92,12 +92,12 @@ contract AskMi {
     /* ---------- GETTER FUNCTIONS ---------- */
 
     // @return The complete array of supported tokens
-    function getSupportedTokens() external view returns (address[] memory) {
+    function supportedTokens() external view returns (address[] memory) {
         return _supportedTokens;
     }
 
     // @return The tip cost and the token address
-    function getTip() external view returns (uint256, address) {
+    function tipAndToken() external view returns (uint256, address) {
         return (_tip.tip, _tip.token);
     }
 
@@ -108,13 +108,13 @@ contract AskMi {
     }
 
     // @return The complete set of questioners as an array
-    function getQuestioners() external view returns (address[] memory) {
+    function questioners() external view returns (address[] memory) {
         return _questioners;
     }
 
     // @param questioner Address of one questioner from the questioners set
     // @return The complete array of exchanges started by a questioner
-    function getQuestions(address questioner)
+    function questions(address questioner)
         external
         view
         returns (Exchange[] memory)

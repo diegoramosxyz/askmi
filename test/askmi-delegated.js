@@ -56,7 +56,7 @@ describe('AskMiUltimate', () => {
 
   it('has all correct initial values', async () => {
     let fee = await askmi._fee()
-    let questioners = await askmi.getQuestioners()
+    let questioners = await askmi.questioners()
     let tiers = await askmi.getTiers(constants.AddressZero)
     let owner = await askmi._owner()
 
@@ -67,7 +67,7 @@ describe('AskMiUltimate', () => {
   })
 
   it('supportedTokens() returns no tokens', async () => {
-    let supportedTokens = await askmi.getSupportedTokens()
+    let supportedTokens = await askmi.supportedTokens()
     expect(supportedTokens.length).eq(0)
   })
 
@@ -86,7 +86,7 @@ describe('AskMiUltimate', () => {
         )
     ).to.be.rejected
 
-    questions = await askmi.getQuestions(accounts[1].address)
+    questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(0)
   })
@@ -105,7 +105,7 @@ describe('AskMiUltimate', () => {
         )
     ).to.be.rejected
 
-    questions = await askmi.getQuestions(accounts[1].address)
+    questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(0)
   })
@@ -134,7 +134,7 @@ describe('AskMiUltimate', () => {
   })
 
   it('supportedTokens() returns tokens', async () => {
-    let supportedTokens = await askmi.getSupportedTokens()
+    let supportedTokens = await askmi.supportedTokens()
 
     expect(supportedTokens[0]).eq(constants.AddressZero)
     expect(supportedTokens[1]).eq(daiAddress)
@@ -154,7 +154,7 @@ describe('AskMiUltimate', () => {
         { value: utils.parseEther('1.0') }
       )
 
-    questions = await askmi.getQuestions(accounts[1].address)
+    questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(1)
   })
@@ -171,7 +171,7 @@ describe('AskMiUltimate', () => {
         1
       )
 
-    questions = await askmi.getQuestions(accounts[1].address)
+    questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(2)
   })
@@ -181,7 +181,7 @@ describe('AskMiUltimate', () => {
       .connect(accounts[1])
       .remove(functionsAddress, accounts[1].address, 0)
 
-    let questions = await askmi.getQuestions(accounts[1].address)
+    let questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(1)
   })
@@ -191,7 +191,7 @@ describe('AskMiUltimate', () => {
       .connect(accounts[1])
       .remove(functionsAddress, accounts[1].address, 0)
 
-    let questions = await askmi.getQuestions(accounts[1].address)
+    let questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(0)
   })
@@ -224,7 +224,7 @@ describe('AskMiUltimate', () => {
 
     expect(events[0]['event']).eq('QuestionAnswered')
 
-    let questions = await askmi.getQuestions(accounts[1].address)
+    let questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(1)
   })
@@ -256,7 +256,7 @@ describe('AskMiUltimate', () => {
 
     expect(events[2]['event']).eq('QuestionAnswered')
 
-    let questions = await askmi.getQuestions(accounts[1].address)
+    let questions = await askmi.questions(accounts[1].address)
 
     expect(questions.length).eq(2)
   })
@@ -268,7 +268,7 @@ describe('AskMiUltimate', () => {
       constants.AddressZero
     )
 
-    let tip = await askmi.getTip()
+    let tip = await askmi.tipAndToken()
 
     expect(tip[0].toString()).eq(parseEth('0.1'))
     expect(tip[1]).eq(constants.AddressZero)
@@ -281,7 +281,7 @@ describe('AskMiUltimate', () => {
         value: utils.parseEther('0.1'),
       })
 
-    questions = await askmi.getQuestions(accounts[1].address)
+    questions = await askmi.questions(accounts[1].address)
 
     expect(questions[0].tips.toString()).eq('1')
   })
@@ -289,7 +289,7 @@ describe('AskMiUltimate', () => {
   it('updateTip() works for ERC20', async () => {
     await askmi.updateTip(functionsAddress, parseEth('0.1'), daiAddress)
 
-    let tip = await askmi.getTip()
+    let tip = await askmi.tipAndToken()
 
     expect(tip[0].toString()).eq(parseEth('0.1'))
     expect(tip[1]).eq(daiAddress)
@@ -300,7 +300,7 @@ describe('AskMiUltimate', () => {
       .connect(accounts[1])
       .issueTip(functionsAddress, accounts[1].address, 1)
 
-    questions = await askmi.getQuestions(accounts[1].address)
+    questions = await askmi.questions(accounts[1].address)
 
     expect(questions[1].tips.toString()).eq('1')
   })
@@ -311,7 +311,7 @@ describe('AskMiUltimate', () => {
     let tiers = await askmi.getTiers(constants.AddressZero)
     expect(tiers.length).eq(0)
 
-    supportedTokens = await askmi.getSupportedTokens()
+    supportedTokens = await askmi.supportedTokens()
     expect(supportedTokens[0]).eq(daiAddress)
     expect(supportedTokens.length).eq(1)
   })
@@ -323,7 +323,7 @@ describe('AskMiUltimate', () => {
 
     expect(tiers.length).eq(0)
 
-    let supportedTokens = await askmi.getSupportedTokens()
+    let supportedTokens = await askmi.supportedTokens()
 
     expect(supportedTokens.length).eq(0)
   })
