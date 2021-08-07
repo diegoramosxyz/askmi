@@ -23,7 +23,7 @@ describe('AskMiUltimate', () => {
     accounts = await getSigners()
 
     // Deploy ERC20
-    daiFactory = await getContractFactory('contracts/ERC20.sol:MyToken')
+    daiFactory = await getContractFactory('MyToken')
     dai = await daiFactory.deploy('DAI', 'DAI')
     daiAddress = (await dai).address
 
@@ -31,17 +31,13 @@ describe('AskMiUltimate', () => {
     await dai.transfer(accounts[1].address, parseDai('1000.0'))
 
     // Deploy askmi
-    askmiFunctionsFactory = await getContractFactory(
-      'contracts/askmi-ultimate/askmi-functions.sol:AskMiFunctions'
-    )
+    askmiFunctionsFactory = await getContractFactory('AskMiFunctions')
 
     askmiFunctions = await askmiFunctionsFactory.deploy()
     functionsAddress = (await askmiFunctions).address
 
     // Deploy askmi
-    askmiFactory = await getContractFactory(
-      'contracts/askmi-ultimate/askmi.sol:AskMi'
-    )
+    askmiFactory = await getContractFactory('AskMi')
 
     askmi = await askmiFactory.deploy(
       functionsAddress,
