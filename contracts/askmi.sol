@@ -1,437 +1,317 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-// TODO:
-// - Make the answers updatable
-// - Maybe allow the responder to write an "AD" about his
-// expertise, social media and others.
-// - Set a min. value to charge per question
-
-// RESPONDER: The owner of the contract.
-// QUESTIONER: Anyone who asks a question.
-// EXCHANGE: The exchange between the questioner asking
-// as question and the responder answering
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "./askmi-functions.sol";
 
 // @title A question-and-answer smart contract
 // @author Diego Ramos
+// @notice This contract is unadited
+// @dev Any mention of ERC20 tokens implies that the zero address (0x0) is used to represent ether (ETH), as if ether was an ERC20 token with address 0x0.
+// @custom:roles responder: Owner of an askmi instance and the only person allowed to answer questions and change the contracts' settings. questioner: Anyone with an EOA who decides to ask a question.
 contract AskMi {
-    /** 
-        VARIABLES
-     */
+    /* ---------- VARIABLES ---------- */
 
-    // @notice The owner of this smart contract
-    address public owner;
+    // @notice The owner of this smart contract (askmi instance)
+    address public _owner;
 
-    // @notice The cost to tip an exchange in Wei
-    uint256 public tip;
+    // @dev Variable used to prevent re-entrancy
+    bool private _locked;
 
-    // @notice The developer's address which receives the dev fee
-    address internal dev;
+    // @notice Prevents the ask() function from being called
+    bool public _disabled;
 
-    // @notice The fee sent to the developer (balance/200 = 0.5%)
-    uint256 public fee = 200;
+    // @notice The tip cost and token address for all exchanges
+    Tip public _tip;
 
-    // @notice The prices to ask a question
-    uint256[] internal tiers;
+    // @dev Address designated to receive all dev fees
+    address private _developer;
 
-    // @notice The list of questions from a questioner
-    mapping(address => Exchange[]) internal exchanges;
-
-    // @notice Helper mapping to find specific questioners
-    // This is used to modify the questioners array
-    mapping(address => uint256) internal questionersIndex;
+    // @notice The developer fee and removal fee
+    Fees public _fees;
 
     // @notice An array of all unique addresses which have asked a question
-    address[] internal questioners;
+    address[] private _questioners;
 
-    // @notice Variable used to prevent re-entrancy
-    bool internal locked;
+    // @notice Mapping pointing to the possition of a questioner in the questioners array
+    mapping(address => uint256) private _questionersIndex;
 
-    /**
-        CONSTRUCTOR
-     */
+    // @notice The list of questions from a questioner
+    mapping(address => Exchange[]) private _exchanges;
 
-    // @param _owner The owner of the current contract
-    // @param _tiers The prices to ask a question
-    // @param _tip The cost to tip in Wei
-    // @param _dev The developer's address which receives the dev fee
-    constructor(
-        address _owner,
-        uint256[] memory _tiers,
-        uint256 _tip,
-        address _dev
-    ) {
-        owner = _owner;
-        tiers = _tiers;
-        tip = _tip;
-        dev = _dev;
+    // @notice List of token addresses accepted as payment by the responder
+    address[] private _supportedTokens;
 
-        // Occupy the first index
-        questioners.push(address(0));
-    }
+    // @dev Mapping pointing to the possition of supported tokens in the supportedTokens array
+    mapping(address => uint256) private _supportedTokensIndex;
 
-    // Make the smart contract payable
-    receive() external payable {}
+    // @dev The tiers for each supported token
+    mapping(address => uint256[]) private _tiers;
 
-    /**
-        STRUCTS
-     */
+    /* ---------- STRUCTS ---------- */
 
-    // The multihash representation of an IPFS' CID
+    // @dev The multihash representation of an IPFS' CID
+    // @custom:struct digest The digest output of hash function in hex with prepended '0x'
+    // @custom:struct hashFunction The hash function code for the function used
+    // @custom:struct size The length of digest
     struct Cid {
         string digest;
         uint256 hashFunction;
         uint256 size;
     }
 
+    // @custom:struct token Address for the token used to pay to tip
+    // @custom:struct tip Amount required to tip
+    struct Tip {
+        address token;
+        uint256 tip;
+    }
+
+    // @custom:struct removal Fee paid to the responder for deleting a question. If the responder removes the question it's justified because he has to pay gas fees. If the questioner removes it, it's justified because the responder may have started working on an answer.
+    // @custom:struct developer Fee paid to the developer of the project
+    struct Fees {
+        uint256 removal;
+        uint256 developer;
+    }
+
+    // @dev exchange The exchange between the questioner asking as question and the responder answering it
+    // @custom:struct question The CID containing the question
+    // @custom:struct answer The CID containing the answer
+    // @custom:struct token Address for the token used to pay to ask
+    // @custom:struct index Index of the current exchange in the exchanges array
+    // @custom:struct balance Amount paid to ask
+    // @custom:struct tips Amount of times an answer has been tipped
     struct Exchange {
         Cid question;
         Cid answer;
-        uint256 exchangeIndex;
-        // The balance in wei paid to the owner for a response
-        // This will vary depending on the price tiers
+        address token;
+        uint256 index;
         uint256 balance;
         uint256 tips;
     }
 
-    /**
-        EVENTS
-     */
+    /* ---------- CONSTRUCTOR ---------- */
 
-    event QuestionAsked(address _questioner, uint256 _exchangeIndex);
-    event QuestionAnswered(address _questioner, uint256 _exchangeIndex);
-    event QuestionRemoved(address _questioner, uint256 _exchangeIndex);
-    event TipIssued(
-        address _tipper,
-        address _questioner,
-        uint256 _exchangeIndex
-    );
-    event TipUpdated(uint256 _newTipPrice);
-    event TiersUpdated(uint256[] _newTiers);
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param developer The developer's address
+    // @param owner This contract's owner
+    // @param tiersToken Any ERC20 token or 0x0 for ETH
+    // @param tipToken Any ERC20 token or 0x0 for ETH
+    // @param tiers The tiers for the selected token
+    // @param tip The cost for people to tip
+    // @param removalFee The fee taken from the questioner to remove a question
+    constructor(
+        address functionsContract,
+        address developer,
+        address owner,
+        address tiersToken,
+        address tipToken,
+        uint256[] memory tiers,
+        uint256 tip,
+        uint256 removalFee
+    ) {
+        _developer = developer;
+        _owner = owner;
+        _fees.developer = 200; // (balance/200 = 0.5%)
 
-    /** 
-        MODIFIERS
-     */
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Unauthorized: Must be owner.");
-        _;
-    }
-
-    modifier notOwner() {
-        require(msg.sender != owner, "Unauthorized: Must not be owner.");
-        _;
-    }
-
-    // Ensure the questioner is paying the right price
-    modifier coversCost(uint256 _tierIndex) {
-        require(_tierIndex < tiers.length, "The selected tier does not exist.");
-        require(
-            msg.value == tiers[_tierIndex],
-            "The deposit is not equal to the tier price."
+        (bool removalSuccess, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateRemovalFee(uint256)", removalFee)
         );
-        _;
+
+        require(removalSuccess, "updateRemovalFee() failed");
+
+        (bool tiersSuccess, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "updateTiers(address,uint256[])",
+                tiersToken,
+                tiers
+            )
+        );
+        require(tiersSuccess, "updateTiers() failed");
+
+        (bool tipSuccess, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateTip(uint256,address)", tip, tipToken)
+        );
+
+        require(tipSuccess, "updateTip() failed");
+
+        // Occupy the first index of the questioners
+        // array to allow for array lookups
+        _questioners.push(address(0));
     }
 
-    modifier noReentrant() {
-        require(!locked, "No re-entrancy.");
-        locked = true;
-        _;
-        locked = false;
+    /* ---------- EVENTS ---------- */
+
+    // @param questioner The person who asked the question
+    // @param index The index of the question in the exchanges array
+    event QuestionAnswered(address questioner, uint256 index);
+
+    /* ---------- GETTER FUNCTIONS ---------- */
+
+    // @return The complete array of supported tokens
+    function supportedTokens() external view returns (address[] memory) {
+        return _supportedTokens;
     }
 
-    /** 
-        UPDATE FUNCTIONS 
-    */
-
-    // @notice Update the tip value
-    function updateTip(uint256 _newTipPrice) public onlyOwner {
-        tip = _newTipPrice;
-        emit TipUpdated(_newTipPrice);
+    // @param token Any ERC20 token address
+    // @return The tiers corresponding to the input address
+    function getTiers(address token) external view returns (uint256[] memory) {
+        return _tiers[token];
     }
 
-    // @notice Update the tiers array
-    function updateTiers(uint256[] memory _newTiers) public onlyOwner {
-        tiers = _newTiers;
-        emit TiersUpdated(_newTiers);
+    // @return The complete set of questioners as an array
+    function questioners() external view returns (address[] memory) {
+        return _questioners;
     }
 
-    /**
-        GETTER FUNCTIONS
-     */
-
-    // @notice Get the complete tiers array
-    function getTiers() public view returns (uint256[] memory) {
-        return tiers;
-    }
-
-    // @notice Get the complete questioners array.
-    function getQuestioners() public view returns (address[] memory) {
-        return questioners;
-    }
-
-    // @notice Get all of the questions asked by one questioner
-    function getQuestions(address _questioner)
-        public
+    // @param questioner Address of one questioner from the questioners set
+    // @return The complete array of exchanges started by a questioner
+    function questions(address questioner)
+        external
         view
         returns (Exchange[] memory)
     {
-        return exchanges[_questioner];
+        return _exchanges[questioner];
     }
 
-    /**
-        HELPER FUNCTIONS
-     */
+    /* ---------- UPDATE FUNCTIONS ---------- */
 
-    // @notice Save the unique addresses of the questioners
-    function addQuestioner() internal {
-        // Only push a new address into the array if it does NOT contain
-        // the selected address
-        if (msg.sender != address(0) && questionersIndex[msg.sender] == 0) {
-            // The min. value for the length of the array is 1, because
-            // index 0 of the array always contains address(0)
-            questionersIndex[msg.sender] = questioners.length;
-            // Append the questioner to the questioners array
-            questioners.push(msg.sender);
-        }
+    // @notice Disable or enable the ask() function
+    function toggleDisabled(address functionsContract) external {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("toggleDisabled()")
+        );
+        require(success, "toggleDisabled() failed");
     }
 
-    /**
-        PRIMARY FUNCTIONS
-     */
+    // @notice Update the tiers for any token. If the new tiers array is empty, support for the selected token will be dropped. If the token was no supported and new tiers are added, support for the token will be enabled
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param token Any ERC20 token
+    // @param tiers The tiers for the selected token
+    function updateTiers(
+        address functionsContract,
+        address token,
+        uint256[] memory tiers
+    ) external {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "updateTiers(address,uint256[])",
+                token,
+                tiers
+            )
+        );
+        require(success, "updateTiers() failed");
+    }
 
-    // @notice Ask a question to the RESPONDER
-    // @param _digest The digest output of hash function in hex with prepended '0x'
-    // @param _hashFunction The hash function code for the function used
-    // @param _size The length of digest
-    // @param _tierIndex The index of the selected tier in the tiers array
+    // @notice Update the tip amount and the supported token for tipping
+    // @param tip The cost for people to tip
+    // @param token Any ERC20 token
+    function updateTip(
+        address functionsContract,
+        uint256 tip,
+        address token
+    ) external {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateTip(uint256,address)", tip, token)
+        );
+        require(success, "updateTip() failed");
+    }
+
+    /* ---------- PRIMARY FUNCTIONS ---------- */
+
+    // @notice Ask a question to the owner
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param token Address of a supported token
+    // @param digest The digest output of hash function in hex with prepended '0x'
+    // @param hashFunction The hash function code for the function used
+    // @param size The length of digest
+    // @param index The index of the selected tier in the _tiers array
     function ask(
-        string memory _digest,
-        uint256 _hashFunction,
-        uint256 _size,
-        uint256 _tierIndex
-    ) public payable notOwner coversCost(_tierIndex) {
-        // Save new questioners
-        addQuestioner();
-
-        // Create Cid object from argumets
-        Cid memory _question = Cid({
-            digest: _digest,
-            hashFunction: _hashFunction,
-            size: _size
-        });
-
-        // Initialize answer object with default values
-        Cid memory _answer;
-
-        uint256 _exchangeIndex = exchanges[msg.sender].length;
-
-        // Initialize the exchange object
-        exchanges[msg.sender].push(
-            Exchange({
-                question: _question,
-                answer: _answer,
-                balance: msg.value,
-                exchangeIndex: _exchangeIndex,
-                tips: 0
-            })
+        address functionsContract,
+        address token,
+        string memory digest,
+        uint256 hashFunction,
+        uint256 size,
+        uint256 index
+    ) external payable {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "ask(address,string,uint256,uint256,uint256)",
+                token,
+                digest,
+                hashFunction,
+                size,
+                index
+            )
         );
-
-        emit QuestionAsked(msg.sender, _exchangeIndex);
+        require(success, "ask() failed");
     }
 
-    // @notice The questioner or the responder can remove a question and
-    // a refund is issued
-    // TODO: Maybe have the responder receive a fraction of the refund if the
-    // questioner removes the question
-    function removeQuestion(address _questioner, uint256 _exchangeIndex)
-        public
-        noReentrant
-    {
-        // Only allow the owner to remove questions from any questioner
-        address questioner;
-        if (msg.sender == owner) {
-            questioner = _questioner;
-        } else {
-            questioner = msg.sender;
-        }
-
-        // Get all the exchanges from a questioner
-        Exchange[] storage _exchanges = exchanges[questioner];
-
-        // Stop execution if the questioner has no questions
-        require(_exchanges.length > 0, "No questions available to remove.");
-
-        // Check that the question exists
-        require(_exchangeIndex < _exchanges.length, "Question does not exist.");
-
-        // Check that the question has not been answered
-        // An empty string is the default value for a string
-        require(
-            keccak256(bytes(_exchanges[_exchangeIndex].answer.digest)) ==
-                keccak256(bytes("")),
-            "Question already answered."
+    // @notice The questioner or the responder can remove a question and a refund is issued
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param questioner The questioner's address
+    // @param index Index of the selected exchange in the questioners' exchanges array
+    function remove(
+        address functionsContract,
+        address questioner,
+        uint256 index
+    ) external {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "remove(address,uint256)",
+                questioner,
+                index
+            )
         );
-
-        // Create a refund variable to return the money deposited
-        uint256 refund = _exchanges[_exchangeIndex].balance;
-
-        if (_exchanges.length == 1) {
-            // In this case, the questioner is removing their last question
-            // 1- Remove his address from the questioners array
-            // 2- Reset questionersIndex (default value of uint is 0)
-            // 3- Remove the last exchange from the exchanges array
-
-            // 0xabc is calling the function
-
-            // [0x0, 0xabc, 0x123]
-            // 0xabc -> 1
-            // 0x123 -> 2
-
-            // Get the last questioner in the array
-            address lastQuestioner = questioners[questioners.length - 1];
-
-            // Get the index for the function caller
-            uint256 callerIndex = questionersIndex[questioner];
-
-            // Change the index to that of the questioner to be deleted
-            questionersIndex[lastQuestioner] = callerIndex;
-
-            // [0x0, 0xabc, 0x123]
-            // 0xabc -> 1
-            // 0x123 -> 1
-
-            // Use the last questioner to overwrite the questioner to be deleted
-            questioners[callerIndex] = lastQuestioner;
-
-            // [0x0, 0x123, 0x123]
-            // 0xabc -> 1
-            // 0x123 -> 1
-
-            // Remove the last element/duplicate
-            questioners.pop();
-
-            // [0x0, 0x123]
-            // 0xabc -> 1
-            // 0x123 -> 1
-
-            // Set questionersIndex to the default value: 0
-            questionersIndex[questioner] = 0;
-
-            // [0x0, 0x123]
-            // 0xabc -> 0
-            // 0x123 -> 1
-
-            // Remove the last element
-            // TODO: Check if the delete keyword should be used here
-            _exchanges.pop();
-        } else {
-            // Delete question and shrink array
-
-            // Get the last element of the array
-            Exchange memory lastExchange = _exchanges[_exchanges.length - 1];
-
-            // Change its exchangeIndex value to match new index
-            lastExchange.exchangeIndex = _exchangeIndex;
-
-            // Use the last element to overwrite the element to be deleted
-            _exchanges[_exchangeIndex] = lastExchange;
-
-            // Remove the last element/duplicate
-            _exchanges.pop();
-        }
-
-        // Pay the questioner
-        (bool success, ) = questioner.call{value: refund}("");
-        require(success, "Failed to send Ether");
-
-        emit QuestionRemoved(questioner, _exchangeIndex);
+        require(success, "remove() failed");
     }
 
     // @notice The owner answers a question
-    // @param _questioner The address which asked the question
-    // @param _digest The digest output of hash function in hex with prepended '0x'
-    // @param _hashFunction The hash function code for the function used
-    // @param _size The length of digest
-    // @param _exchangeIndex The index of the selected exchange in the array of exchanges of
-    // the questioner
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param questioner The questioner's address
+    // @param digest The digest output of hash function in hex with prepended '0x'
+    // @param hashFunction The hash function code for the function used
+    // @param size The length of digest
+    // @param index Index of the selected exchange in the questioners' exchanges array
     function respond(
-        address _questioner,
-        string memory _digest,
-        uint256 _hashFunction,
-        uint256 _size,
-        uint256 _exchangeIndex
-    ) public noReentrant onlyOwner {
-        // Get all the exchanges from a questioner
-        Exchange[] storage _exchanges = exchanges[_questioner];
+        address functionsContract,
+        address questioner,
+        string memory digest,
+        uint256 hashFunction,
+        uint256 size,
+        uint256 index
+    ) external {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "respond(address,string,uint256,uint256,uint256)",
+                questioner,
+                digest,
+                hashFunction,
+                size,
+                index
+            )
+        );
+        require(success, "respond() failed");
 
-        // Check that the exchange exists
-        require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
-
-        // Get the balance of the selected exchange
-        uint256 _balance = _exchanges[_exchangeIndex].balance;
-
-        // Create payment variables
-        uint256 devFee = (_balance) / fee;
-        uint256 payment = _balance - devFee;
-
-        Cid memory _answer = Cid({
-            digest: _digest,
-            hashFunction: _hashFunction,
-            size: _size
-        });
-
-        // Get the selected exchange
-        Exchange memory _exchange = _exchanges[_exchangeIndex];
-
-        // Update the selected exchange
-        _exchange.answer = _answer;
-        _exchange.balance = 0 wei;
-
-        _exchanges[_exchangeIndex] = _exchange;
-
-        // Pay the owner of the contract (The Responder)
-        (bool success, ) = owner.call{value: payment}("");
-        require(success, "Failed to send Ether");
-        // Pay dev fee
-        (bool devSuccess, ) = dev.call{value: devFee}("");
-        require(devSuccess, "Failed to send Ether");
-
-        emit QuestionAnswered(_questioner, _exchangeIndex);
+        emit QuestionAnswered(questioner, index);
     }
 
     // @notice Tip an exchange to highlight helpful content
-    function issueTip(address _questioner, uint256 _exchangeIndex)
-        public
-        payable
-        notOwner
-    {
-        // Get all the exchanges from a questioner
-        Exchange[] memory _exchanges = exchanges[_questioner];
-
-        // Check that the exchange exists
-        require(_exchangeIndex < _exchanges.length, "Exchange does not exist.");
-
-        // Check that the tip amount is correct
-        require(msg.value == tip, "The tip amount is incorrect.");
-
-        // Create payment variable
-        uint256 payment = msg.value;
-
-        // Get the selected exchange
-        Exchange memory _exchange = _exchanges[_exchangeIndex];
-
-        // Increment the tip count
-        _exchange.tips = _exchanges[_exchangeIndex].tips + 1;
-
-        // Update the selected exchange
-        _exchanges[_exchangeIndex] = _exchange;
-
-        // Pay the owner of the contract (The Responder)
-        // TODO: Split the tip among the responder, the questioner and the dev
-        (bool success, ) = owner.call{value: payment}("");
-        require(success, "Failed to send Ether");
-
-        emit TipIssued(msg.sender, _questioner, _exchangeIndex);
+    // @param functionsContract Contract with functions to modify state in this contract
+    // @param questioner The questioner's address
+    // @param index Index of the selected exchange in the questioners' exchanges array
+    function issueTip(
+        address functionsContract,
+        address questioner,
+        uint256 index
+    ) external payable {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature(
+                "issueTip(address,uint256)",
+                questioner,
+                index
+            )
+        );
+        require(success, "issueTip() failed");
     }
 }

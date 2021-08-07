@@ -11,7 +11,7 @@ Asuming a 0.000000017 ETH / 17 Gwei Gas price
 | Deployment       | 3665329  | 0.0623                |
 | instantiateAskMi | 2914211  | 0.0495                |
 
-## AskMi Factory
+## AskMi Factory (ERC20)
 
 | Action           | Gas Used | Execution Cost in ETH |
 | ---------------- | -------- | --------------------- |

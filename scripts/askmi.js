@@ -13,14 +13,33 @@ async function main() {
   // manually to make sure everything is compiled
   // await hre.run('compile');
 
-  // We get the contract to deploy
-  const Factory = await hre.ethers.getContractFactory('MyToken')
-  // Deploy with a price per question of 1 ETH
-  const contract = await Factory.deploy('DAI', 'DAI')
+  // DEPLOY ERC20
+  const erc20Factory = await hre.ethers.getContractFactory('MyToken')
+  const erc20 = await erc20Factory.deploy('DAI', 'DAI')
 
-  await contract.deployed()
+  await erc20.deployed()
 
-  console.log('MyToken deployed to:', contract.address)
+  console.log('MyToken deployed to:', erc20.address)
+
+  // DEPLOY ASKMI FUNCTIONS
+  const askMiFunctionsFactory = await hre.ethers.getContractFactory(
+    'AskMiFunctions'
+  )
+  const askMiFunctions = await askMiFunctionsFactory.deploy()
+
+  await askMiFunctions.deployed()
+
+  console.log('AskMi Functions deployed to:', askMiFunctions.address)
+
+  // DEPLOY ASKMI FACTORY
+  const askMiFactoryFactory = await hre.ethers.getContractFactory(
+    'AskMiFactory'
+  )
+  const askMiFactory = await askMiFactoryFactory.deploy()
+
+  await askMiFactory.deployed()
+
+  console.log('AskMi Factory deployed to:', askMiFactory.address)
 }
 
 // We recommend this pattern to be able to use async/await everywhere
