@@ -30,17 +30,31 @@ describe('AskMiUltimate', () => {
     // Transfer DAI to second account
     await dai.transfer(accounts[1].address, parseDai('1000.0'))
 
-    // Deploy askmi
+    // Deploy askmi functions
     askmiFunctionsFactory = await getContractFactory('AskMiFunctions')
 
     askmiFunctions = await askmiFunctionsFactory.deploy()
     functionsAddress = (await askmiFunctions).address
 
-    // Deploy askmi
-    askmiFactory = await getContractFactory('AskMi')
+    // Deploy askmi factory
+    AskMiFactoryFactory = await getContractFactory('AskMiFactory')
 
-    askmi = await askmiFactory.deploy(
-      functionsAddress,
+    AskMiFactory = await AskMiFactoryFactory.deploy()
+
+    let tx = await AskMiFactory.instantiateAskMi(
+      constants.AddressZero,
+      constants.AddressZero,
+      [parseEth('0.1'), parseEth('10.0')],
+      parseEth('0.1'),
+      100
+    )
+
+    expect((await tx.wait()).events[0].args.length).eq(1)
+
+    // Deploy askmi
+    askmiF = await getContractFactory('AskMi')
+
+    askmi = await askmiF.deploy(
       accounts[1].address, //dev
       accounts[0].address, //owner
       constants.AddressZero,

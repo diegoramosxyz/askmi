@@ -101,7 +101,6 @@ contract AskMi {
     // @param tip The cost for people to tip
     // @param removalFee The fee taken from the questioner to remove a question
     constructor(
-        address functionsContract,
         address developer,
         address owner,
         address tiersToken,
@@ -114,26 +113,25 @@ contract AskMi {
         _owner = owner;
         _fees.developer = 200; // (balance/200 = 0.5%)
 
-        (bool removalSuccess, ) = functionsContract.delegatecall(
-            abi.encodeWithSignature("updateRemovalFee(uint256)", removalFee)
-        );
+        require(removalFee > 0, "Removal Fee must be greate than 0");
+        _fees.removal = removalFee; // (balance/100 = 1%)
 
-        require(removalSuccess, "updateRemovalFee() failed");
+        uint256 length = tiers.length;
 
-        (bool tiersSuccess, ) = functionsContract.delegatecall(
-            abi.encodeWithSignature(
-                "updateTiers(address,uint256[])",
-                tiersToken,
-                tiers
-            )
-        );
-        require(tiersSuccess, "updateTiers() failed");
+        require(length > 0 && length < 10, "Choose 1 to 9 tiers");
+        for (uint256 i = 0; i < length; i++) {
+            require(tiers[i] > 0, "Tier value must be greater than 0");
+        }
 
-        (bool tipSuccess, ) = functionsContract.delegatecall(
-            abi.encodeWithSignature("updateTip(uint256,address)", tip, tipToken)
-        );
+        // Save new supported token
+        _supportedTokensIndex[tiersToken] = _supportedTokens.length;
+        _supportedTokens.push(tiersToken);
 
-        require(tipSuccess, "updateTip() failed");
+        // Save new tiers
+        _tiers[tiersToken] = tiers;
+
+        // Save new tip value
+        _tip = Tip({token: tipToken, tip: tip});
 
         // Occupy the first index of the questioners
         // array to allow for array lookups

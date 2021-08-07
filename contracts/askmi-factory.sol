@@ -44,7 +44,6 @@ contract AskMiFactory {
     // @param tip The cost for people to tip
     // @param removalFee The fee taken from the questioner to remove a question
     function instantiateAskMi(
-        address functionsContract,
         address tiersToken,
         address tipToken,
         uint256[] memory tiers,
@@ -55,7 +54,6 @@ contract AskMiFactory {
 
         // Instantiate AskMi contract
         AskMi askMi = new AskMi(
-            functionsContract,
             _owner,
             msg.sender,
             tiersToken,
