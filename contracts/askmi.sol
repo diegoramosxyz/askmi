@@ -111,7 +111,9 @@ contract AskMi {
     ) {
         _developer = developer;
         _owner = owner;
-        _fees.developer = 200; // (balance/200 = 0.5%)
+
+        // A fee of 1 = 0.01%, 100 = 1% and 10,000 = 100%
+        _fees.developer = 50;
 
         require(removalFee > 0, "Removal Fee must be greate than 0");
         _fees.removal = removalFee; // (balance/100 = 1%)
@@ -215,6 +217,7 @@ contract AskMi {
     // @notice Update the tip amount and the supported token for tipping
     // @param tip The cost for people to tip
     // @param token Any ERC20 token
+    // @dev A removal fee of 1 = 0.01%, 100 = 1% and 10,000 = 100%
     function updateTip(
         address functionsContract,
         uint256 tip,

@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // expertise, social media and others
 
 // ERRORS CODES
-// ERR1: Removal fee must be greater than 0
+// ERR1: Removal fee must be between 1 and 10,000
 // ERR2: Attempted to add a tier of cost 0
 // ERR3: Must be owner to call function
 // ERR4: Must not be owner to call function
@@ -189,9 +189,13 @@ contract AskMiFunctions {
         }
     }
 
+    // @notice Update the tip amount and the supported token for tipping
+    // @param tip The cost for people to tip
+    // @param token Any ERC20 token
+    // @dev A removal fee of 1 = 0.01%, 100 = 1% and 10,000 = 100%
     function updateRemovalFee(uint256 removalFee) external onlyOwner {
-        require(removalFee > 0, "ERR1");
-        _fees.removal = removalFee; // (balance/100 = 1%)
+        require(removalFee >= 1 && removalFee <= 10000, "ERR1");
+        _fees.removal = removalFee;
     }
 
     /* ---------- HELPER FUNCTIONS ---------- */
@@ -302,7 +306,7 @@ contract AskMiFunctions {
         // Create payment variables
         uint256 balance = exchanges[index].balance;
 
-        uint256 removalFee = (balance) / _fees.removal;
+        uint256 removalFee = (balance * _fees.removal) / 10000;
         uint256 refund = balance - removalFee;
 
         address token = exchanges[index].token;
@@ -414,7 +418,7 @@ contract AskMiFunctions {
         uint256 balance = exchanges[index].balance;
 
         // Create payment variables
-        uint256 devFee = (balance) / _fees.developer;
+        uint256 devFee = (balance * _fees.developer) / 10000;
         uint256 payment = balance - devFee;
 
         address token = exchanges[index].token;

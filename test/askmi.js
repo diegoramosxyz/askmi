@@ -61,7 +61,7 @@ describe('AskMiUltimate', () => {
       constants.AddressZero,
       [parseEth('0.1'), parseEth('10.0')],
       parseEth('0.1'),
-      100 // (balance/100 = 1%)
+      100
     )
 
     // Approve ERC20 spending
@@ -77,7 +77,7 @@ describe('AskMiUltimate', () => {
     let tiers = await askmi.getTiers(constants.AddressZero)
     let owner = await askmi._owner()
 
-    expect(fees.developer).eq('200')
+    expect(fees.developer).eq('50')
     expect(fees.removal).eq('100')
     expect(tiers.length).eq(2)
     expect(questioners[0]).eq(constants.AddressZero)
