@@ -182,6 +182,17 @@ contract AskMi {
         require(success, "toggleDisabled() failed");
     }
 
+    // @notice Update the removal fee
+    // @param removalFee The fee taken from the questioner to remove a question
+    function updateRemovalFee(address functionsContract, uint256 removalFee)
+        external
+    {
+        (bool success, ) = functionsContract.delegatecall(
+            abi.encodeWithSignature("updateRemovalFee(uint256)", removalFee)
+        );
+        require(success, "updateRemovalFee() failed");
+    }
+
     // @notice Update the tiers for any token. If the new tiers array is empty, support for the selected token will be dropped. If the token was no supported and new tiers are added, support for the token will be enabled
     // @param functionsContract Contract with functions to modify state in this contract
     // @param token Any ERC20 token

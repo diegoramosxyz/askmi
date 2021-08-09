@@ -3,7 +3,7 @@ chai.use(require('chai-as-promised'))
 const { expect } = chai
 
 const {
-  ethers: { utils, getSigners, getContractFactory, constants },
+  ethers: { utils, getSigners, getContractFactory, constants, BigNumber },
 } = require('hardhat')
 
 describe('AskMiUltimate', () => {
@@ -385,5 +385,11 @@ describe('AskMiUltimate', () => {
         0,
         { value: utils.parseEther('1.0') }
       )
+  })
+
+  it('updateRemovalFee() works', async () => {
+    await askmi.updateRemovalFee(functionsAddress, BigNumber.from(300))
+    let fees = await askmi._fees()
+    expect(fees.removal).eq('300')
   })
 })
