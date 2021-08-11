@@ -194,7 +194,7 @@ contract AskMiFunctions {
     // @param token Any ERC20 token
     // @dev A removal fee of 1 = 0.01%, 100 = 1% and 10,000 = 100%
     function updateRemovalFee(uint256 removalFee) external onlyOwner {
-        require(removalFee >= 1 && removalFee <= 10000, "ERR1");
+        require(removalFee <= 10000, "ERR1");
         _fees.removal = removalFee;
     }
 

@@ -115,7 +115,7 @@ contract AskMi {
         // A fee of 1 = 0.01%, 100 = 1% and 10,000 = 100%
         _fees.developer = 50;
 
-        require(removalFee > 0, "Removal Fee must be greate than 0");
+        require(removalFee <= 10000, "Removal Fee must be less than 10000");
         _fees.removal = removalFee; // (balance/100 = 1%)
 
         uint256 length = tiers.length;
