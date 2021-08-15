@@ -5,7 +5,7 @@ require('dotenv').config()
  * @type import('hardhat/config').HardhatUserConfig
  */
 
-// const { MUMBAI_API_URL, ROPSTEN_API_URL, PRIVATE_KEY } = process.env
+const { MUMBAI_API_URL, ROPSTEN_API_URL, PRIVATE_KEY } = process.env
 
 /**
  * Hardhat Localhost network (MetaMask)
@@ -18,16 +18,16 @@ require('dotenv').config()
 
 module.exports = {
   solidity: '0.8.0',
-  // defaultNetwork: 'ropsten',
+  defaultNetwork: 'ropsten',
   networks: {
-    // hardhat: {},
-    // ropsten: {
-    //   url: ROPSTEN_API_URL,
-    //   accounts: [`0x${PRIVATE_KEY}`],
-    // },
-    // mumbai: {
-    //   url: MUMBAI_API_URL,
-    //   accounts: [`0x${PRIVATE_KEY}`],
-    // },
+    hardhat: {},
+    ropsten: {
+      url: ROPSTEN_API_URL,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
+    mumbai: {
+      url: 'MUMBAI_API_URL',
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
   },
 }
